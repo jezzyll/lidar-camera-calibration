@@ -1,0 +1,38 @@
+# RealSense color intrinsics recorded in all three bags (CameraInfo, 640x480).
+camera:
+  frame: camera_color_optical_frame
+  width: 640
+  height: 480
+  distortion_model: plumb_bob
+  K:
+    - [386.76702881, 0.0, 322.92172241]
+    - [0.0, 386.23919678, 240.03582764]
+    - [0.0, 0.0, 1.0]
+  D: [-0.05702033, 0.06783563, -0.00031395, 0.00094203, -0.02286913]
+
+# Checkerboard geometry confirmed from the near recording.
+checkerboard:
+  inner_corners: [11, 17]
+  square_size_m: 0.025
+
+# Estimated by scripts/calibrate.py. Direction is explicit:
+# p_camera_optical = R * p_livox + t
+extrinsic:
+  parent_frame: camera_color_optical_frame
+  child_frame: livox_frame
+  method: checkerboard_plane_and_boundary_near_pose
+  R:
+    - [-0.05337164, -0.99786028, 0.03776672]
+    - [-0.28107325, -0.02127949, -0.95945037]
+    - [0.95820107, -0.06182265, -0.27933612]
+  t_m: [0.15050517, -0.12079831, 0.21021229]
+  T_camera_lidar:
+    - [-0.05337164, -0.99786028, 0.03776672, 0.15050517]
+    - [-0.28107325, -0.02127949, -0.95945037, -0.12079831]
+    - [0.95820107, -0.06182265, -0.27933612, 0.21021229]
+    - [0.0, 0.0, 0.0, 1.0]
+
+quality:
+  camera_checkerboard_reprojection_rmse_px: 0.163
+  lidar_board_plane_rmse_m: 0.00395
+  near_pose_board_bbox_rmse_px: 0.66

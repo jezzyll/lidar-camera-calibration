@@ -1,0 +1,9 @@
+.venv/
+.local-tools/
+data/raw/
+data/raw_new/
+outputs/
+tmp/
+__pycache__/
+*.pyc
+.DS_Store
