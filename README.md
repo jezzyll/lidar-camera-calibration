@@ -46,9 +46,38 @@ Run after extracting the ZIP to `data/raw_new/new1/`:
 Recommended files to show the mentor:
 
 - `outputs/reflectivity_white_square_projection.png` — main close-up;
+- `outputs/nn_calibration/nn_white_square_projection.png` — neural-network-assisted
+  full-board close-up using LiDAR-only MLP cell classification;
 - `outputs/reflectivity_full_scene.png` — full-scene proof;
 - `outputs/lidar_reflectivity_checkerboard.png` — what LiDAR alone observes;
 - `outputs/calibration_reflectivity_result.json` — transform and honest metrics.
+
+## Neural-network-assisted reflectivity result
+
+The optional neural stage uses a scikit-learn `MLPClassifier` with architecture
+`24 -> 16 -> 8 -> 1`. Its 24 inputs are LiDAR reflectivity statistics and
+histogram bins extracted independently from each rectified checker cell. It
+does not use camera pixels as input and does not replace the intrinsic or
+extrinsic geometric solve.
+
+On five-fold held-out-cell validation within `new1`, the MLP classified all 260
+white/black checker cells correctly. Its full-board projection selects 16,730
+measured returns, reaches all 130 white cells, and places 100.00% of those
+selected returns on camera-white pixels in this recording. No camera-white
+display mask is used. These figures are same-recording checker classification
+and projection metrics, not independent calibration or detector accuracy.
+
+Run:
+
+```bash
+.venv/bin/python scripts/calibrate_reflectivity_nn.py
+```
+
+Outputs:
+
+- `outputs/nn_calibration/nn_white_square_projection.png`;
+- `outputs/nn_calibration/nn_reflectivity_report.json`;
+- `outputs/nn_calibration/mlp_reflectivity_classifier.pkl`.
 
 ## What the requested output means
 
