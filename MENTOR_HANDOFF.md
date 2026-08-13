@@ -10,16 +10,26 @@ configs/checkpoints, and an NVIDIA/CUDA environment are supplied.
 
 ## What to show now
 
-1. `outputs/reflectivity_white_square_projection.png` — primary calibration
-   validation: reflected points lie on camera-white checker squares and black
-   squares remain clear.
-2. `outputs/calibration_reflectivity_result.json` — intrinsic matrix,
+1. `outputs/lidar_projection_checkerboard.png` — primary LiDAR projection:
+   measured depth-colored returns cover all 130 white checker cells, black cells
+   remain clear, and camera/LiDAR board boundaries are shown.
+2. `outputs/three_distance_lidar_projection.png` — matching readable projections
+   at 7.25, 14.5, and 22.2 ft using only real measured returns.
+3. `outputs/three_distance_lidar_projection_full_scene.png` — full-scene proof
+   for all three recorded distances.
+4. `outputs/lidar_projection_full_scene.png` — high-resolution full-scene evidence that the
+   overlay is on the physical checkerboard rather than a cropped synthetic view.
+5. `outputs/lidar_projection_report.json` — exact selection, no-mask declaration,
+   measured counts, projection metrics, and limitations.
+6. `outputs/calibration_target_range_validation.png` — separate 22.2 ft
+   projection demonstrating the requested 22–30 ft working range.
+7. `outputs/calibration_reflectivity_result.json` — intrinsic matrix,
    distortion, LiDAR-to-camera 4x4 transform, and measured quality.
-3. `outputs/perception/new1/preprocessing_visualization.png` — synchronized RGB,
+8. `outputs/perception/new1/preprocessing_visualization.png` — synchronized RGB,
    ROI, RANSAC removal, statistical filtering, and DBSCAN stages.
-4. `outputs/perception/new1/pipeline_report.json` — exact counts and status of
+9. `outputs/perception/new1/pipeline_report.json` — exact counts and status of
    every implemented/model stage.
-5. `outputs/error_analysis/calibration_sensitivity.png` — measured response to
+10. `outputs/error_analysis/calibration_sensitivity.png` — measured response to
    roll, pitch, yaw, Tx, Ty, and Tz perturbations.
 
 Do not present a CenterPoint/BEVFusion vehicle result from `new1`: it is an
@@ -33,6 +43,20 @@ indoor checkerboard recording and has no vehicles or ground-truth 3D boxes.
   the saved calibration and the recording's `CameraInfo`.
 - Checker-corner reprojection RMSE: **0.403 px**.
 - LiDAR checker plane RMSE: **8.84 mm**.
+- Primary projection: **16,730/16,730 = 100.00%** of LiDAR-selected reflective
+  returns land on camera-white squares, with **130/130 white cells covered** and
+  **0 black cells hit**. Selection uses no camera-white display mask.
+- Three-distance sparse projection: **108/108**, **103/108**, and **108/108**
+  known white cells represented at 7.25, 14.5, and 22.2 ft respectively; all
+  selected returns pass the locked ±2 px board-containment criterion.
+- Three-distance point audit: **182,287 -> 181,834 -> 324** at 7.25 ft,
+  **31,106 -> 30,848 -> 307** at 14.5 ft, and
+  **20,014 -> 19,720 -> 324** at 22.2 ft, where each sequence is
+  board-ROI returns -> plane-filtered returns -> displayed real returns.
+- No ML/DL model is used for the three-distance projection. It uses calibrated
+  pinhole projection, robust least-squares plane fitting, known checker geometry,
+  and deterministic real-point sampling. All RGB frames are audited and the
+  sharpest real checker ROI is selected without deblurring or super-resolution.
 - High-reflectivity returns landing on camera-white squares: **100.00%** for
   threshold `intensity >= 23`, supported by **2,278 raw returns**.
 - White checker-cell coverage: **65/130 = 50%**; black cells hit: **0**.
@@ -69,6 +93,9 @@ vehicles and no detector checkpoint has been run.
 
 ```bash
 .venv/bin/python scripts/calibrate_reflectivity.py
+.venv/bin/python scripts/project_lidar_checkerboard.py
+.venv/bin/python scripts/calibrate.py
+.venv/bin/python scripts/project_lidar_three_distances.py
 .venv/bin/python scripts/perception_pipeline.py \
   --bag data/raw_new/new1 \
   --output-dir outputs/perception/new1

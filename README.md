@@ -13,6 +13,96 @@ CenterPoint/BEVFusion execution is deliberately gated on compatible pretrained
 artifacts, CUDA, road-scene data, and 3D labels. The calibration recordings do
 not contain evidence from which vehicle-detection accuracy can be computed.
 
+## Primary LiDAR projection result
+
+The main mentor-facing output is now
+`outputs/lidar_projection_checkerboard.png`. It projects 16,730 real measured
+LiDAR returns through the saved extrinsic and recorded camera model. The points
+are selected from reflective checker cells using only LiDAR geometry and
+reflectivity; there is no camera-white display mask.
+
+Measured projection result:
+
+- checker corner reprojection RMSE: **0.403 px**;
+- returns landing on camera-white checker squares: **16,730/16,730 = 100.00%**;
+- white checker cells reached: **130/130**;
+- camera checker black cells hit: **0**;
+- unique rendered LiDAR pixels: **6,576**.
+
+The output is colored by camera depth and includes both the camera-derived and
+LiDAR-projected board boundaries, matching the requested projection format.
+`outputs/lidar_projection_full_scene.png` provides the uncropped scene context,
+while `outputs/calibration_target_range_validation.png` provides the separate
+22.2 ft range evidence.
+
+Run the projection after the high-resolution calibration:
+
+```bash
+.venv/bin/python scripts/calibrate_reflectivity.py
+.venv/bin/python scripts/project_lidar_checkerboard.py
+```
+
+The preserved checker pattern is strong visual calibration evidence, but it
+does not mathematically establish “perfect” calibration. The RMSE, measured
+point counts, no-mask declaration, and a held-out 22–30 ft capture remain
+necessary for a defensible accuracy statement.
+
+### Projection at all three recorded distances
+
+`scripts/project_lidar_three_distances.py` produces the same readable projection
+format at **7.25 ft, 14.5 ft, and 22.2 ft**. Because dense accumulation paints an
+opaque rectangle over the distant boards, it displays three real measured
+returns nearest the center of each available known white cell. It does not
+create synthetic points and does not use a camera-white pixel mask.
+
+Results with the locked ±2 px board-boundary criterion:
+
+- 7.25 ft: **108/108 cells represented, 100.00% PASS**;
+- 14.5 ft: **103/108 cells represented, 100.00% PASS**;
+- 22.2 ft: **108/108 cells represented, 100.00% PASS**.
+
+Run:
+
+```bash
+.venv/bin/python scripts/calibrate.py
+.venv/bin/python scripts/project_lidar_three_distances.py
+```
+
+Outputs:
+
+- `outputs/three_distance_lidar_projection.png` — primary three-distance close-up;
+- `outputs/three_distance_lidar_projection_full_scene.png` — physical-scene proof;
+- `outputs/lidar_projection_7_25ft.png`;
+- `outputs/lidar_projection_14_5ft.png`;
+- `outputs/lidar_projection_22_2ft.png`;
+- `outputs/three_distance_lidar_projection_report.json`.
+
+At 14.5 ft a cell is about 2.3 camera pixels; at 22.2 ft it is only about
+1.6 pixels. The magnified overlays can show measured point placement and board
+containment, but those recordings cannot independently prove white-vs-black
+square accuracy. A higher-resolution 22–30 ft capture or a larger checkerboard
+is required for that stronger claim.
+
+The script audits every RGB frame and selects the sharpest checkerboard ROI by
+variance of Laplacian: frame 1267/1486 at 7.25 ft, frame 54/1326 at 14.5 ft,
+and frame 425/1658 at 22.2 ft. No ML/DL, deblurring, or super-resolution model is
+used. The projection itself is classical geometry using the recorded camera
+intrinsics/distortion and calibrated `R,t`. Exact LiDAR provenance and
+raw→ROI→plane→display counts are saved in the JSON report.
+
+Current point audit:
+
+| Distance | Board-ROI returns | Plane-filtered | Displayed measured returns |
+|---:|---:|---:|---:|
+| 7.25 ft | 182,287 | 181,834 | 324 |
+| 14.5 ft | 31,106 | 30,848 | 307 |
+| 22.2 ft | 20,014 | 19,720 | 324 |
+
+The optional MLP elsewhere in this repository is used only for LiDAR
+reflectivity-cell classification in the separate high-resolution `new1`
+experiment. It is not used for these three-distance projections or for the
+geometric calibration.
+
 ## Recommended mentor-facing result (new high-resolution bag)
 
 `new1-002.zip` contains a closer 1280×720 recording. It has a different camera
@@ -90,8 +180,10 @@ p_camera = R_camera_lidar * p_livox + t_camera_lidar
 ```
 
 When calibration is correct, returns from the physical checkerboard land on that same
-checkerboard in the camera image. “Points on black should be clear” means inspecting
-this pixel alignment. A dense colored rectangle by itself is not proof of 99.99% accuracy.
+checkerboard in the camera image. The validation now reports a defined percentage in
+addition to RMSE: the fraction of selected physical-board returns that project inside,
+or no more than 2 px outside, the annotated camera board boundary. The required
+threshold is 99%. This is checkerboard alignment accuracy, not detector accuracy.
 
 ## Dataset audit
 
@@ -115,6 +207,13 @@ checkerboard solve.
 
 ## Result
 
+The final refinement includes `dataset03 22.2feet`, which passes the requested
+22–30 ft calibration-range requirement. The 7.25 ft checker corner detection is used
+for a stable initialization, while the outer checkerboard boundaries at all three
+ranges constrain the final transform. The far board occupies only about 19×30 camera
+pixels, so its outer boundary is explicitly annotated instead of reporting unreliable
+internal-corner detections.
+
 The transform direction is:
 
 ```text
@@ -122,22 +221,26 @@ p_camera_color_optical = R * p_livox + t
 ```
 
 ```text
-R = [-0.05337164  -0.99786028   0.03776672]
-    [-0.28107325  -0.02127949  -0.95945037]
-    [ 0.95820107  -0.06182265  -0.27933612]
+R = [-0.03659380  -0.99855630   0.03932181]
+    [-0.26905772  -0.02805037  -0.96271549]
+    [ 0.96242861  -0.04580926  -0.26764282]
 
-t = [ 0.15050517, -0.12079831, 0.21021229 ] metres
+t = [ 0.12405766, -0.13617702, 0.19254424 ] metres
 ```
 
 Measured fit diagnostics:
 
 - checkerboard PnP reprojection RMSE: **0.163 px** on the near calibration image;
-- LiDAR checkerboard plane RMSE: **3.95 mm** after robust fitting;
-- projected-vs-camera board boundary RMSE: approximately **0.66 px** on the near pose;
-- the independent middle and far recordings visually land on their boards.
+- near LiDAR checkerboard plane RMSE: **3.96 mm** after robust fitting;
+- joint board-corner reprojection RMSE: **2.83 px** across all three poses;
+- 7.25 ft board-point alignment: **100.00%** within the predeclared ±2 px tolerance;
+- 14.5 ft board-point alignment: **99.29%** within ±2 px;
+- 22.2 ft target-range board-point alignment: **100.00%** within ±2 px.
 
-These are meaningful calibration metrics. Do not claim “99.99% accuracy”; calibration
-quality should be reported in pixels, millimetres, and independent held-out overlays.
+The percentage has an explicit numerator, denominator, and tolerance in
+`outputs/validation_metrics.json`. These are in-sample alignment-fit measurements
+because all three poses constrain the refinement. A new, separate 22–30 ft recording
+is still required before claiming independent 99% generalization accuracy.
 
 The machine-readable result is `outputs/calibration_result.json`; a copy suitable for
 ROS/config use is `config/calibration.yaml`.
@@ -164,15 +267,17 @@ python3 -m venv .venv
 Outputs:
 
 - `outputs/calibration_result.json` — intrinsics, distortion, transform, fit quality;
-- `outputs/calibration_validation.png` — the mentor-facing three-distance overlay;
-- `outputs/calibration_closeup_validation.png` — close-up with both board bounds;
-- `outputs/validation_metrics.json` — projected point/depth/bounds summary.
+- `outputs/calibration_validation.png` — three-distance overlay with 99% pass/fail results;
+- `outputs/calibration_target_range_validation.png` — mentor-facing 22.2 ft result;
+- `outputs/calibration_closeup_validation.png` — compatibility copy of the target-range view;
+- `outputs/validation_metrics.json` — metric definition, counts, percentages, and range checks.
 
 ## What is needed for a stronger second capture
 
 For a genuine checkerboard-only intrinsic calibration, record at least 15–25 sharp
 camera views with the board filling different parts of the image, including strong tilt
 and distance changes. For stronger extrinsics, record 6–10 simultaneous camera/LiDAR
-board poses (different positions and tilts), keep the sensor rig rigid, measure the exact
-square size, and avoid reflective-floor returns. Do not proceed to models until these
-held-out projection overlays pass.
+board poses at 22–30 ft (different positions and tilts), keep the sensor rig rigid,
+measure the exact square size, and avoid reflective-floor returns. Reserve at least one
+additional 22–30 ft capture as a held-out test and apply the same locked ±2 px / 99%
+criterion without refitting.

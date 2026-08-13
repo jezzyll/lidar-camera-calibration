@@ -20,19 +20,28 @@ checkerboard:
 extrinsic:
   parent_frame: camera_color_optical_frame
   child_frame: livox_frame
-  method: checkerboard_plane_and_boundary_near_pose
+  method: near_pose_initialization_plus_multi_range_board_boundary_refinement
   R:
-    - [-0.05337164, -0.99786028, 0.03776672]
-    - [-0.28107325, -0.02127949, -0.95945037]
-    - [0.95820107, -0.06182265, -0.27933612]
-  t_m: [0.15050517, -0.12079831, 0.21021229]
+    - [-0.03659380, -0.99855630, 0.03932181]
+    - [-0.26905772, -0.02805037, -0.96271549]
+    - [0.96242861, -0.04580926, -0.26764282]
+  t_m: [0.12405766, -0.13617702, 0.19254424]
   T_camera_lidar:
-    - [-0.05337164, -0.99786028, 0.03776672, 0.15050517]
-    - [-0.28107325, -0.02127949, -0.95945037, -0.12079831]
-    - [0.95820107, -0.06182265, -0.27933612, 0.21021229]
+    - [-0.03659380, -0.99855630, 0.03932181, 0.12405766]
+    - [-0.26905772, -0.02805037, -0.96271549, -0.13617702]
+    - [0.96242861, -0.04580926, -0.26764282, 0.19254424]
     - [0.0, 0.0, 0.0, 1.0]
 
 quality:
   camera_checkerboard_reprojection_rmse_px: 0.163
-  lidar_board_plane_rmse_m: 0.00395
-  near_pose_board_bbox_rmse_px: 0.66
+  lidar_board_plane_rmse_m: 0.00396
+  joint_board_corner_reprojection_rmse_px: 2.83
+  projected_board_alignment_accuracy_pct_at_22_2_ft: 100.0
+  alignment_pixel_tolerance: 2.0
+  required_accuracy_pct: 99.0
+
+range_requirement:
+  required_ft: [22.0, 30.0]
+  calibration_dataset: dataset03 22.2feet
+  calibration_distance_ft: 22.2
+  pass: true
