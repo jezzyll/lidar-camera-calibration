@@ -2,6 +2,7 @@
 .local-tools/
 data/raw/
 data/raw_new/
+data/public/
 outputs/
 tmp/
 __pycache__/

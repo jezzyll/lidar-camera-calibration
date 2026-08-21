@@ -1,129 +1,131 @@
-# Mentor handoff: Livox Mid-360 + RealSense D455 pipeline
+# Mentor handoff: Phase 1 calibration validation
 
-## One-sentence status
+## Decision
 
-Calibration and all classical preprocessing/data-conversion algorithms are
-implemented and verified on `new1`; CenterPoint, BEVFusion, and fine-tuning are
-connected through real MMDetection3D adapters but cannot produce a valid
-detection result until synchronized road scenes, 3D labels, compatible model
-configs/checkpoints, and an NVIDIA/CUDA environment are supplied.
+Phase 1 is **not yet accepted** under the project/mentor-defined requirement:
 
-## What to show now
+> At every internal distance, at least 99% of independently selected valid
+> LiDAR returns must have Euclidean reprojection error ≤ 2 pixels.
 
-1. `outputs/lidar_projection_checkerboard.png` — primary LiDAR projection:
-   measured depth-colored returns cover all 130 white checker cells, black cells
-   remain clear, and camera/LiDAR board boundaries are shown.
-2. `outputs/three_distance_lidar_projection.png` — matching readable projections
-   at 7.25, 14.5, and 22.2 ft using only real measured returns.
-3. `outputs/three_distance_lidar_projection_full_scene.png` — full-scene proof
-   for all three recorded distances.
-4. `outputs/lidar_projection_full_scene.png` — high-resolution full-scene evidence that the
-   overlay is on the physical checkerboard rather than a cropped synthetic view.
-5. `outputs/lidar_projection_report.json` — exact selection, no-mask declaration,
-   measured counts, projection metrics, and limitations.
-6. `outputs/calibration_target_range_validation.png` — separate 22.2 ft
-   projection demonstrating the requested 22–30 ft working range.
-7. `outputs/calibration_reflectivity_result.json` — intrinsic matrix,
-   distortion, LiDAR-to-camera 4x4 transform, and measured quality.
-8. `outputs/perception/new1/preprocessing_visualization.png` — synchronized RGB,
-   ROI, RANSAC removal, statistical filtering, and DBSCAN stages.
-9. `outputs/perception/new1/pipeline_report.json` — exact counts and status of
-   every implemented/model stage.
-10. `outputs/error_analysis/calibration_sensitivity.png` — measured response to
-   roll, pitch, yaw, Tx, Ty, and Tz perturbations.
+This is a project acceptance criterion. It is not claimed to be a universal
+threshold taken from a paper or standard.
 
-Do not present a CenterPoint/BEVFusion vehicle result from `new1`: it is an
-indoor checkerboard recording and has no vehicles or ground-truth 3D boxes.
+## Internal multi-frame result
 
-## Measured results
+| Distance | Frames | Evaluated returns | Mean px | RMSE px | Median px | ≤1 px | ≤2 px | ≤3 px | Max px | Result |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|:---:|
+| 7.25 ft | 10 | 1,786 | 0.217 | 0.237 | 0.205 | 100.00% | 100.00% | 100.00% | 0.752 | pass |
+| 14.5 ft | 10 | 345 | 3.928 | 3.991 | 3.846 | 0.00% | 0.00% | 4.06% | 5.365 | fail |
+| 22.2 ft | 10 | 176 | 2.113 | 2.192 | 2.154 | 2.27% | 43.18% | 97.16% | 3.064 | fail |
 
-- RGB/LiDAR timestamp difference for the tested frame: **17.706 ms**, within
-  the configured **50 ms** tolerance.
-- Calibration intrinsic consistency: **0.0 maximum matrix difference** between
-  the saved calibration and the recording's `CameraInfo`.
-- Checker-corner reprojection RMSE: **0.403 px**.
-- LiDAR checker plane RMSE: **8.84 mm**.
-- Primary projection: **16,730/16,730 = 100.00%** of LiDAR-selected reflective
-  returns land on camera-white squares, with **130/130 white cells covered** and
-  **0 black cells hit**. Selection uses no camera-white display mask.
-- Three-distance sparse projection: **108/108**, **103/108**, and **108/108**
-  known white cells represented at 7.25, 14.5, and 22.2 ft respectively; all
-  selected returns pass the locked ±2 px board-containment criterion.
-- Three-distance point audit: **182,287 -> 181,834 -> 324** at 7.25 ft,
-  **31,106 -> 30,848 -> 307** at 14.5 ft, and
-  **20,014 -> 19,720 -> 324** at 22.2 ft, where each sequence is
-  board-ROI returns -> plane-filtered returns -> displayed real returns.
-- No ML/DL model is used for the three-distance projection. It uses calibrated
-  pinhole projection, robust least-squares plane fitting, known checker geometry,
-  and deterministic real-point sampling. All RGB frames are audited and the
-  sharpest real checker ROI is selected without deblurring or super-resolution.
-- High-reflectivity returns landing on camera-white squares: **100.00%** for
-  threshold `intensity >= 23`, supported by **2,278 raw returns**.
-- White checker-cell coverage: **65/130 = 50%**; black cells hit: **0**.
-- Preprocessing test: **19,872 raw points -> 6,895 ROI -> 5,986 non-ground ->
-  5,794 statistically filtered points -> 4 DBSCAN clusters**.
-- Vehicle-size proposals: **0**, which is correct for this non-vehicle scene.
+No "100% calibration accuracy" claim is made. The percentages above are the
+fractions of evaluated returns satisfying specific Euclidean pixel-error
+thresholds.
 
-The 100% figure is white-return precision on the calibration recording, not
-overall system/detector accuracy. Detection AP/mAP/NDS is currently **not
-measurable**, not “under 10,” because the supplied data contain no labeled
-vehicles and no detector checkpoint has been run.
+## Independent point selection
 
-## Algorithms implemented
+The internal evaluation set is selected before any RGB reference is consulted:
 
-1. Nearest-neighbour timestamp synchronization with an explicit maximum delta.
-2. Camera intrinsic validation from D455 `CameraInfo`.
-3. Checkerboard/reflectivity LiDAR-to-camera extrinsic estimation with PnP.
-4. RANSAC approximately-horizontal ground-plane removal.
-5. K-nearest-neighbour statistical outlier removal.
-6. DBSCAN point-cloud clustering.
-7. Configurable spatial ROI and vehicle-dimension proposal filtering.
-8. PCA-based oriented geometric proposal boxes.
-9. Float32 `[x,y,z,intensity]` and
-   `[x,y,z,intensity,time_lag]` `.bin` export.
-10. Undistorted synchronized RGB and 3D-to-2D projection metadata export.
-11. Real MMDetection3D `LidarDet3DInferencer` adapter for CenterPoint.
-12. Real MMDetection3D `MultiModalityDet3DInferencer` adapter for BEVFusion.
-13. Upstream MMDetection3D trainer launcher for supervised fine-tuning.
-14. Upstream MMDetection3D held-out test/evaluation launcher.
-15. Deterministic extrinsic perturbation analysis with pixel drift, RMSE, and
-    projected-board bounding-box IoU.
+1. read a single raw Livox frame;
+2. apply the predeclared metric LiDAR ROI;
+3. fit `x = a*y + b*z + c` robustly using LiDAR coordinates;
+4. keep returns with absolute plane residual ≤ 0.015 m;
+5. keep returns inside the known 0.30×0.45 m board with a 0.00375 m
+   boundary margin;
+6. freeze those returns;
+7. only then use the camera checkerboard geometry to obtain reference pixels.
 
-## Commands already verified
+The RGB mask is saved only as a separate visualization/annotation file. It is
+never used to select, reject, or score a LiDAR return.
 
-```bash
-.venv/bin/python scripts/calibrate_reflectivity.py
-.venv/bin/python scripts/project_lidar_checkerboard.py
-.venv/bin/python scripts/calibrate.py
-.venv/bin/python scripts/project_lidar_three_distances.py
-.venv/bin/python scripts/perception_pipeline.py \
-  --bag data/raw_new/new1 \
-  --output-dir outputs/perception/new1
-.venv/bin/python scripts/calibration_error_analysis.py
+## Mathematical definition
+
+For the calibrated projection \((u_i,v_i)\) and independent checkerboard
+reference \((u_i^*,v_i^*)\) for the same physical point:
+
+```text
+e_i = sqrt((u_i-u_i*)^2 + (v_i-v_i*)^2)
 ```
 
-## What is still required for the final vehicle visualization
+- strict raster match: `round(u_i)=round(u_i*)` and
+  `round(v_i)=round(v_i*)`;
+- continuous exact match: `e_i ≤ 1e-9 px`;
+- acceptance match: `e_i ≤ 2 px`.
 
-- Synchronized road-driving ROS bags containing actual vehicles.
-- Oriented 3D labels for cars/pedestrians/cyclists and train/validation/test
-  splits.
-- A CenterPoint configuration/checkpoint adapted to Livox coordinates and the
-  five-field point format.
-- A **single-camera** BEVFusion configuration adapted to the D455. A stock
-  nuScenes BEVFusion configuration assumes its own dataset and multiple cameras.
-- Linux with an NVIDIA GPU/CUDA-compatible PyTorch/MMCV/MMDetection3D stack.
-- Evaluation with held-out class-wise AP/mAP, orientation/translation errors,
-  and projected 3D-box IoU. No accuracy claim should be made on training data.
+Mean, median, RMSE, maximum, and the percentages at 1, 2, and 3 pixels are all
+reported. The JSON also includes strict-raster and continuous-exact rates.
 
-## Short explanation for the mentor
+## Public external experiment
 
-> First I calibrated the D455 intrinsics and the rigid Livox-to-camera
-> transform on the checkerboard. I verified that the saved calibration exactly
-> matches the recording's CameraInfo and obtained 0.403-pixel corner RMSE. Then
-> I synchronized RGB and LiDAR by timestamp, cropped the LiDAR ROI, removed the
-> ground by RANSAC, removed sparse outliers statistically, clustered with
-> DBSCAN, formed oriented geometric proposals, and exported model-compatible
-> XYZI-time data plus the undistorted RGB/projection metadata. CenterPoint and
-> BEVFusion are connected to MMDetection3D, but this checkerboard recording has
-> no vehicles or 3D labels, so a valid detection accuracy and final vehicle-box
-> visualization require road data, checkpoints, CUDA, and held-out labels.
+The non-synthetic external baseline is the [ACSC real camera–LiDAR
+checkerboard dataset](https://github.com/HViktorTsoi/ACSC), with the
+[official sample download](https://drive.google.com/file/d/1hgV-aH_RSsL1geHDSIlwwvqrMy6ED56K/view).
+Fourteen frames are used for the public extrinsic fit and seven distinct frames
+are held out.
+
+The held-out public aggregate is 59,764 evaluated returns, 16.387 px mean,
+10.367 px median, 24.214 px RMSE, 53.526 px maximum, 11.82% within 1 px,
+25.01% within 2 px, and 30.70% within 3 px: **fail**. This failure is kept in
+the report. The current simple LiDAR grid-corner extractor is not reliable
+enough across all ACSC poses and must be improved before this can be claimed as
+a successful external baseline.
+
+Public and internal experiments are never combined into one percentage.
+
+## Calibration parameters
+
+```text
+K = [[386.76702881,   0.00000000, 322.92172241],
+     [  0.00000000, 386.23919678, 240.03582764],
+     [  0.00000000,   0.00000000,   1.00000000]]
+
+D = [-0.05702033, 0.06783563, -0.00031395, 0.00094203, -0.02286913]
+resolution = 640 x 480
+
+R_camera_lidar =
+[[-0.03659380, -0.99855630,  0.03932181],
+ [-0.26905772, -0.02805037, -0.96271549],
+ [ 0.96242861, -0.04580926, -0.26764282]]
+
+t_camera_lidar_m = [0.12405766, -0.13617702, 0.19254424]
+
+T_camera_lidar =
+[[-0.03659380, -0.99855630,  0.03932181,  0.12405766],
+ [-0.26905772, -0.02805037, -0.96271549, -0.13617702],
+ [ 0.96242861, -0.04580926, -0.26764282,  0.19254424],
+ [ 0.00000000,  0.00000000,  0.00000000,  1.00000000]]
+```
+
+Convention: `p_camera_color_optical = R_camera_lidar * p_livox +
+t_camera_lidar`; camera optical axes are +X right, +Y down, +Z forward; metres;
+pixel origin at top-left, u right and v down.
+
+## Evidence to show
+
+Primary report and tables:
+
+- `PHASE1_VALIDATION.md`;
+- `outputs/phase1_validation/phase1_validation_report.json`;
+- `outputs/phase1_validation/internal_multiframe_metrics.csv`;
+- `outputs/phase1_validation/internal_calibration_parameters.yaml`.
+
+Nine qualitative projection figures are in
+`outputs/phase1_validation/qualitative/`: three public examples and two
+synchronized examples at each internal distance. Every example includes:
+
+- an original-resolution, losslessly stored RGB image;
+- a separate mask that is not used for scoring;
+- the checkerboard reference, measured projected LiDAR returns, point-wise
+  reference markers/error lines, and an error color scale.
+
+## Reproduce
+
+```bash
+.venv/bin/python scripts/calibrate.py
+.venv/bin/python scripts/phase1_required_validation.py
+```
+
+The full raw-data directory layout and public download instructions are in
+`README.md`. The JSON is the canonical record; it contains train/test indices,
+all per-frame metrics and timestamps, RGB pixel hashes, LiDAR selection audits,
+full transforms, integrity declarations, and limitations.

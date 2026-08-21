@@ -200,7 +200,7 @@ def lidar_board_polygon(coefficient, spec, rotation, translation, camera_k, dist
     )[0].reshape(-1, 2)
 
 
-def polygon_accuracy(pixels, camera_polygon, tolerance):
+def polygon_containment(pixels, camera_polygon, tolerance):
     contour = np.asarray(camera_polygon, dtype=np.float32)
     signed_distance = np.asarray([
         cv2.pointPolygonTest(contour, (float(point[0]), float(point[1])), True)
@@ -242,11 +242,11 @@ def add_projection(axis, item, closeup, marker_size):
         padding = np.array([max(8.0, 0.30 * width), max(8.0, 0.20 * height)])
         axis.set_xlim(minimum[0] - padding[0], maximum[0] + padding[0])
         axis.set_ylim(maximum[1] + padding[1], minimum[1] - padding[1])
-    status = "PASS" if item["accuracy_pass"] else "FAIL"
     axis.set_title(
         f"{item['distance_ft']:g} ft\n"
         f"{item['represented_cells']}/108 white cells | "
-        f"{item['tolerant_accuracy_pct']:.2f}% within ±{item['tolerance_px']:g}px ({status})",
+        f"{item['tolerant_board_containment_pct']:.2f}% board containment "
+        f"(±{item['tolerance_px']:g}px; visual only)",
         fontsize=12, fontweight="bold",
     )
     axis.axis("off")
@@ -276,7 +276,10 @@ def main():
     parser.add_argument("--points-per-cell", type=int, default=3)
     parser.add_argument("--cell-boundary-margin", type=float, default=0.15)
     parser.add_argument("--pixel-tolerance", type=float, default=2.0)
-    parser.add_argument("--required-accuracy-pct", type=float, default=99.0)
+    parser.add_argument(
+        "--required-accuracy-pct", type=float, default=99.0,
+        help="Deprecated compatibility option; containment is not an acceptance metric.",
+    )
     args = parser.parse_args()
     if args.points_per_cell < 1:
         raise SystemExit("--points-per-cell must be at least 1")
@@ -310,7 +313,7 @@ def main():
         projected_polygon = lidar_board_polygon(
             coefficient, spec, rotation, translation, camera_k, distortion,
         )
-        strict_accuracy, tolerant_accuracy = polygon_accuracy(
+        strict_containment, tolerant_containment = polygon_containment(
             pixels, camera_polygon, args.pixel_tolerance,
         )
         horizontal_cell_px, vertical_cell_px = cell_pixel_size(camera_polygon)
@@ -326,10 +329,9 @@ def main():
             "raw_board_roi_returns": int(len(points)),
             "plane_filtered_board_returns": int(len(board)),
             "represented_cells": len(represented_cells),
-            "strict_inside_board_pct": strict_accuracy,
-            "tolerant_accuracy_pct": tolerant_accuracy,
+            "strict_board_containment_pct": strict_containment,
+            "tolerant_board_containment_pct": tolerant_containment,
             "tolerance_px": args.pixel_tolerance,
-            "accuracy_pass": bool(tolerant_accuracy + 1e-12 >= args.required_accuracy_pct),
             "horizontal_pixels_per_cell": horizontal_cell_px,
             "vertical_pixels_per_cell": vertical_cell_px,
             "lidar_plane_rmse_m": plane_rmse,
@@ -411,11 +413,14 @@ def main():
                 "plane fitting, known 12x18 checker geometry, and deterministic measured-point sampling"
             ),
         },
-        "accuracy_requirement": {
+        "legacy_visualization_metric": {
             "metric": "selected returns inside camera board polygon with stated pixel tolerance",
-            "required_accuracy_pct": args.required_accuracy_pct,
             "pixel_tolerance": args.pixel_tolerance,
-            "all_distances_pass": bool(all(item["accuracy_pass"] for item in items)),
+            "used_for_phase1_acceptance": False,
+            "reason": (
+                "board containment does not establish physical point-to-reference "
+                "reprojection error; use phase1_required_validation.py"
+            ),
         },
         "datasets": report_items,
         "outputs": [str(closeups_path), str(full_path), *map(str, individual_paths)],
