@@ -3,6 +3,7 @@
 data/raw/
 data/raw_new/
 data/public/
+deliverables/
 outputs/
 tmp/
 __pycache__/

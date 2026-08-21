@@ -79,6 +79,24 @@ Main generated evidence:
   lossless original-pixel RGB copy, a separate mask, and a projection/error
   figure.
 
+Shareable review files:
+
+- `deliverables/Phase1_Calibration_Validation_Report.docx` — formal report with
+  the implementation, tables, parameters, and all nine projection figures
+  embedded;
+- `deliverables/Phase1_Calibration_Submission_Compact.zip` — approximately
+  21 MB submission containing the Word report, numeric outputs, nine projection
+  images, documentation, and code;
+- `deliverables/Phase1_Calibration_Evidence_Package.zip` — the Word report,
+  JSON/CSV/YAML results, 27 RGB/mask/projection images, documentation, and
+  reproducible code.
+
+Rebuild the Word report after regenerating the validation outputs with:
+
+```bash
+.venv/bin/python scripts/build_phase1_report.py
+```
+
 ## Evaluation design
 
 Internal returns are frozen using only the Livox point cloud: a fixed metric
