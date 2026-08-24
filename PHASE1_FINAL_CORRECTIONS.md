@@ -99,14 +99,27 @@ The frozen transform is also tested with known physical checkerboard corners:
    original-resolution, camera-only grayscale ROI.
 4. Do not use an RGB mask, projected LiDAR pixels, resizing, or warping to
    guide the RGB detector.
-5. Report error only where the complete 11×17 RGB grid is independently
-   resolved.
+5. Before any LiDAR comparison, apply an RGB-only grid-regularity gate: every
+   adjacent horizontal and vertical corner spacing must be 0.50–1.50 times
+   the median spacing for that orientation. This broad interval permits
+   perspective but rejects duplicated or skipped physical rows/columns.
+6. Report error only where the complete 11×17 RGB grid is independently
+   resolved and passes that transform-blind gate.
 
-| Distance | Frames attempted | Frames detected | Corners evaluated | Mean px | Median px | RMSE px | Std px | Max px | ≤1 px | ≤2 px | ≤3 px |
-|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 7.25 ft | 10 | 3 | 561 | 0.380 | 0.253 | 0.728 | 0.621 | 4.901 | 98.04% | 98.04% | 98.04% |
-| 14.5 ft | 10 | 0 | 0 | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
-| 22.2 ft | 10 | 0 | 0 | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
+| Distance | Frames attempted | Raw grids | Accepted grids | Corners evaluated | Mean px | Median px | RMSE px | Std px | Max px | ≤1 px | ≤2 px | ≤3 px |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 7.25 ft | 10 | 3 | 2 | 374 | 0.300 | 0.249 | 0.356 | 0.192 | 0.857 | 100.00% | 100.00% | 100.00% |
+| 14.5 ft | 10 | 0 | 0 | 0 | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
+| 22.2 ft | 10 | 0 | 0 | 0 | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
+
+The earlier 98.04% was traced exactly to 11 apparent corners in the last raw
+detector row of near RGB frame 987. The preceding-to-final-row spacing was
+10.38 px against a 5.69 px orientation median, with a maximum individual
+neighbour ratio of 1.879. In the other two raw near grids that maximum ratio
+was only 1.100 and 1.078. The detector had skipped one physical row; therefore
+the entire frame-987 grid—not the 11 high-error points alone—is rejected using
+RGB geometry before reprojection error is calculated. No transform parameter
+was changed.
 
 The estimated square pitch is approximately 5.37×5.64 px at 7.25 ft,
 2.33×2.38 px at 14.5 ft, and 1.58×1.67 px at 22.2 ft. No complete 11×17 grid
@@ -117,8 +130,10 @@ not fabricated for undetected corners.
 
 `outputs/phase1_final/corner_individual_errors.csv` contains 5,610 attempted
 corner rows (30 frames × 187): physical XYZ and projected RGB coordinates for
-every corner, plus detected RGB coordinates and error for all 561 independently
-observable near-range corners. Detection availability for all 30 frames is in
+every corner, plus accepted RGB coordinates and error for all 374 independently
+observable near-range corners. All 187 rows from the irregular frame are marked
+`rgb_grid_quality_rejected`. Raw detection, regularity ratios, and acceptance
+for all 30 frames are in
 `corner_detection_status.csv`, and three figures are in `corner_validation/`.
 
 ## Timestamp evidence
@@ -256,7 +271,9 @@ All requested causes were checked:
 - **Error direction:** vector consistency is about 0.99 at both failing
   distances, which supports systematic geometry/reference bias instead of
   random point noise.
-- **Independent checkerboard corners:** 561 near corners are evaluated, but no
+- **Independent checkerboard corners:** 374 accepted near corners are evaluated
+  at 100.00% within 2 px. One raw near detector result is rejected in full by
+  the RGB-only spacing gate because it skipped a physical row. No
   complete 11×17 grid is independently resolved at 14.5 ft or 22.2 ft. The
   failing-distance root cause therefore remains unresolved between extrinsic
   error and reference-correspondence uncertainty until the new capture.

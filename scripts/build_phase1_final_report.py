@@ -572,7 +572,10 @@ def build_report(report_path: Path, output_path: Path):
         "from the LiDAR-only board plane and declared 12x18-square, 25 mm geometry. The frozen "
         "transform projects those points into RGB. OpenCV then attempts an independent 11x17 "
         "detection using only an original-resolution camera ROI; no mask, resize, warp, or "
-        "LiDAR projection guides RGB detection.",
+        "LiDAR projection guides RGB detection. Before any reprojection comparison, a camera-"
+        "only regularity gate requires every adjacent row/column spacing to be 0.50--1.50 "
+        "times its orientation median. The gate therefore cannot optimize or screen on LiDAR "
+        "error.",
     )
 
     def corner_value(item, key, precision=3, percent=False):
@@ -588,6 +591,7 @@ def build_report(report_path: Path, output_path: Path):
         corner_rows.append([
             f"{item['distance_ft']:g} ft",
             item["attempted_validation_frames"],
+            item["frames_with_raw_11x17_rgb_detector_result"],
             item["frames_with_independent_11x17_rgb_detection"],
             item["independently_evaluated_corners"],
             corner_value(item, "mean_reprojection_error_px"),
@@ -602,17 +606,29 @@ def build_report(report_path: Path, output_path: Path):
         ])
     add_table(
         doc,
-        ["Distance", "Tried", "Detected", "Corners", "Mean", "Median", "RMSE", "Std", "Max", "<=1", "<=2", "<=3", "Status"],
+        ["Distance", "Tried", "Raw", "Accepted", "Corners", "Mean", "Median", "RMSE", "Std", "Max", "<=1", "<=2", "<=3", "Status"],
         corner_rows,
-        [700, 550, 550, 650, 600, 600, 600, 600, 600, 600, 600, 600, 2110],
+        [650, 450, 450, 550, 600, 520, 520, 520, 520, 520, 520, 520, 520, 2500],
         body_size=6.6,
+    )
+    near_corner = next(
+        item for item in corner_validation["per_distance"]
+        if item["distance_ft"] == 7.25
     )
     add_callout(
         doc,
         "Corner result",
-        "At 7.25 ft, independent corners are available in 3/10 frames: 561 corners, "
-        "mean 0.380 px, median 0.253 px, RMSE 0.728 px, standard deviation 0.621 px, "
-        "maximum 4.901 px, and 98.04% within 1, 2, and 3 px. At 14.5 ft and "
+        f"At 7.25 ft, the raw detector returned grids in "
+        f"{near_corner['frames_with_raw_11x17_rgb_detector_result']}/10 frames and the "
+        f"RGB-only regularity gate accepted "
+        f"{near_corner['frames_with_independent_11x17_rgb_detection']}/10: "
+        f"{near_corner['independently_evaluated_corners']} corners, mean "
+        f"{near_corner['mean_reprojection_error_px']:.3f} px, median "
+        f"{near_corner['median_reprojection_error_px']:.3f} px, RMSE "
+        f"{near_corner['rmse_reprojection_error_px']:.3f} px, standard deviation "
+        f"{near_corner['standard_deviation_reprojection_error_px']:.3f} px, maximum "
+        f"{near_corner['maximum_reprojection_error_px']:.3f} px, and "
+        f"{near_corner['percentage_within_2_px']:.2f}% within 2 px. At 14.5 ft and "
         "22.2 ft the original RGB grid resolves no complete 11x17 pattern, so numeric "
         "corner errors are unavailable rather than fabricated.",
         fill=PALE_BLUE,
@@ -626,6 +642,15 @@ def build_report(report_path: Path, output_path: Path):
         "two failing distances. It instead proves why a larger, sharper target and new "
         "capture are methodologically required.",
     )
+    add_body(
+        doc,
+        "Exact correction of the previous 98.04% result: all 11 apparent failures came "
+        "from the last raw detector row in near RGB frame 987. Its preceding-to-final-row "
+        "spacing was 10.38 px against a 5.69 px median, and its maximum neighbour ratio was "
+        "1.879. The raw detector had skipped one physical row. The entire 187-corner grid "
+        "was rejected before error calculation; no individual corner was removed based on "
+        "error, and the frozen transform was unchanged.",
+    )
 
     detection_rows = []
     for distance in corner_validation["per_distance"]:
@@ -636,16 +661,26 @@ def build_report(report_path: Path, output_path: Path):
                 f"{distance['distance_ft']:g}",
                 frame["evaluation_frame_index"],
                 frame["rgb_frame_index"],
-                "Yes" if detection["detected"] else "No",
+                (
+                    ("Yes" if detection["raw_detector_detected"] else "No")
+                    + " / "
+                    + ("Yes" if detection["detected"] else "No")
+                ),
                 f"{detection['estimated_square_pitch_xy_px'][0]:.2f} x {detection['estimated_square_pitch_xy_px'][1]:.2f}",
                 0 if metrics is None else metrics["evaluated_lidar_points"],
                 "N/A" if metrics is None else f"{metrics['rmse_reprojection_error_px']:.3f}",
-                "evaluated" if metrics is not None else "11x17 grid not resolved",
+                (
+                    "evaluated"
+                    if metrics is not None else
+                    "raw grid rejected: irregular spacing"
+                    if detection["raw_detector_detected"] else
+                    "11x17 grid not resolved"
+                ),
             ])
     add_heading(doc, "9.1 Detection status for all 30 validation frames", 2)
     add_table(
         doc,
-        ["ft", "Eval", "RGB", "Detected", "Square pitch px", "Corners", "RMSE", "Status"],
+        ["ft", "Eval", "RGB", "Raw / valid", "Square pitch px", "Corners", "RMSE", "Status"],
         detection_rows,
         [750, 500, 650, 650, 1700, 900, 1100, 3110],
         body_size=7.0,
@@ -654,8 +689,11 @@ def build_report(report_path: Path, output_path: Path):
         doc,
         "The companion corner_individual_errors.csv contains 5,610 attempted corner rows "
         "(30 frames x 187 corners). It reports physical LiDAR XYZ and projected u,v for every "
-        "row, plus independently detected u,v and error for the 561 observable corners. "
-        "Unavailable detections are explicitly marked rgb_grid_not_detected.",
+        f"row, plus independently detected u,v and error for the "
+        f"{sum(item['independently_evaluated_corners'] for item in corner_validation['per_distance'])} "
+        "accepted corners. Unavailable detections are marked rgb_grid_not_detected and every "
+        "row from a raw grid rejected by the camera-only gate is marked "
+        "rgb_grid_quality_rejected.",
     )
 
     for index, figure in enumerate(corner_validation["figures"], start=1):

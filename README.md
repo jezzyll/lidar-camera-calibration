@@ -30,6 +30,8 @@ claim. The transform is not refitted after validation to force the target.
 - three representative reprojection-error vector plots;
 - a 5,610-row independent physical-corner attempt audit and three corner
   observability figures;
+- an RGB-only checker-grid regularity gate that rejects complete raw detector
+  grids with duplicated/skipped rows before any LiDAR error is calculated;
 - complete optimization mathematics and actual convergence counters;
 - `RᵀR`, determinant, and rotation-validity evidence;
 - documented checks for synchronization, frame convention, translation,

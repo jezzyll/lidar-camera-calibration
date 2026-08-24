@@ -58,11 +58,21 @@ independent target observations are required before attributing all error to
 
 ## Independent corner result
 
-| Distance | Frames attempted/detected | Evaluated corners | Mean px | RMSE px | Std px | Max px | ≤2 px |
-|---:|:---:|---:|---:|---:|---:|---:|---:|
-| 7.25 ft | 10 / 3 | 561 | 0.380 | 0.728 | 0.621 | 4.901 | 98.04% |
-| 14.5 ft | 10 / 0 | 0 | N/A | N/A | N/A | N/A | N/A |
-| 22.2 ft | 10 / 0 | 0 | N/A | N/A | N/A | N/A | N/A |
+| Distance | Attempted / raw / accepted | Evaluated corners | Mean px | Median px | RMSE px | Std px | Max px | ≤2 px |
+|---:|:---:|---:|---:|---:|---:|---:|---:|---:|
+| 7.25 ft | 10 / 3 / 2 | 374 | 0.300 | 0.249 | 0.356 | 0.192 | 0.857 | 100.00% |
+| 14.5 ft | 10 / 0 / 0 | 0 | N/A | N/A | N/A | N/A | N/A | N/A |
+| 22.2 ft | 10 / 0 / 0 | 0 | N/A | N/A | N/A | N/A | N/A | N/A |
+
+The original 98.04% value was not a transform failure. All 11 apparent
+failures were in the final row returned for RGB frame 987. That final row was
+10.38 px from its predecessor while the grid's median vertical neighbour
+spacing was 5.69 px (maximum neighbour ratio 1.879), proving that the raw
+detector skipped a physical row. A declared RGB-only regularity gate now
+requires every neighbour spacing to be 0.50–1.50× its orientation median. It
+rejects the entire irregular grid before comparison with LiDAR; it does not
+filter individual corners by reprojection error and it does not alter `R` or
+`t`.
 
 At 14.5 ft the square pitch is only about 2.33×2.38 px; at 22.2 ft it is
 about 1.58×1.67 px. The complete 11×17 RGB grid is not independently resolved
@@ -70,8 +80,10 @@ in any middle/far frame, so corner statistics cannot honestly decide between
 extrinsic error and correspondence uncertainty from these recordings.
 
 `corner_individual_errors.csv` contains all 5,610 attempted physical corners;
-561 have independently detected RGB coordinates/errors and the unavailable
-rows are explicitly marked.
+374 have independently accepted RGB coordinates/errors, all 187 corners in
+the irregular raw grid are marked `rgb_grid_quality_rejected`, and unresolved
+rows are explicitly marked. `corner_detection_status.csv` supplies the raw
+detection flag and exact minimum/maximum spacing ratios for every frame.
 
 ## Optimization documentation
 

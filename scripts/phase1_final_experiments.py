@@ -62,6 +62,8 @@ CHECKERBOARD_INNER_COLUMNS = 11
 CHECKERBOARD_INNER_ROWS = 17
 CHECKERBOARD_PHYSICAL_COLUMNS = 12
 CHECKERBOARD_PHYSICAL_ROWS = 18
+RGB_GRID_NEIGHBOR_RATIO_MIN = 0.50
+RGB_GRID_NEIGHBOR_RATIO_MAX = 1.50
 
 
 def json_ready(value):
@@ -450,7 +452,8 @@ def detect_independent_rgb_corners(rgb: np.ndarray, dataset: str,
         "rgb_mask_used": False,
         "lidar_projection_used_to_detect": False,
         "estimated_square_pitch_xy_px": [pitch_x, pitch_y],
-        "detected": bool(detected),
+        "raw_detector_detected": bool(detected),
+        "detected": False,
     }
     if not detected:
         audit["failure_reason"] = (
@@ -467,6 +470,48 @@ def detect_independent_rgb_corners(rgb: np.ndarray, dataset: str,
         grid = grid[::-1]
     if grid[:, 0, 0].mean() > grid[:, -1, 0].mean():
         grid = grid[:, ::-1]
+
+    # OpenCV can occasionally return the requested grid size after skipping a
+    # physical checkerboard row. Validate only the RGB grid geometry before it
+    # is compared with any LiDAR projection. The deliberately broad 0.5--1.5x
+    # interval permits perspective variation but rejects duplicated or skipped
+    # neighbours (a skipped row is approximately 2x the normal spacing).
+    vertical_spacing = np.linalg.norm(np.diff(grid, axis=0), axis=2)
+    horizontal_spacing = np.linalg.norm(np.diff(grid, axis=1), axis=2)
+    vertical_median = float(np.median(vertical_spacing))
+    horizontal_median = float(np.median(horizontal_spacing))
+    vertical_ratios = vertical_spacing / max(vertical_median, 1e-12)
+    horizontal_ratios = horizontal_spacing / max(horizontal_median, 1e-12)
+    minimum_ratio = float(min(vertical_ratios.min(), horizontal_ratios.min()))
+    maximum_ratio = float(max(vertical_ratios.max(), horizontal_ratios.max()))
+    regularity_pass = bool(
+        np.all(np.isfinite(vertical_ratios))
+        and np.all(np.isfinite(horizontal_ratios))
+        and minimum_ratio >= RGB_GRID_NEIGHBOR_RATIO_MIN
+        and maximum_ratio <= RGB_GRID_NEIGHBOR_RATIO_MAX
+    )
+    audit["rgb_only_grid_regularity"] = {
+        "uses_lidar_projection_or_reprojection_error": False,
+        "neighbor_spacing_ratio_limits": [
+            RGB_GRID_NEIGHBOR_RATIO_MIN, RGB_GRID_NEIGHBOR_RATIO_MAX,
+        ],
+        "vertical_neighbor_median_px": vertical_median,
+        "horizontal_neighbor_median_px": horizontal_median,
+        "minimum_observed_neighbor_ratio": minimum_ratio,
+        "maximum_observed_neighbor_ratio": maximum_ratio,
+        "pass": regularity_pass,
+    }
+    if not regularity_pass:
+        audit["failure_reason"] = (
+            "raw 11x17 detector result rejected by the RGB-only grid-regularity "
+            f"gate: neighbour-spacing ratio range {minimum_ratio:.3f}--"
+            f"{maximum_ratio:.3f} is outside the declared "
+            f"{RGB_GRID_NEIGHBOR_RATIO_MIN:.2f}--{RGB_GRID_NEIGHBOR_RATIO_MAX:.2f} interval"
+        )
+        audit["failure_code"] = "rgb_grid_irregular_spacing"
+        return None, audit
+
+    audit["detected"] = True
     return grid.reshape(-1, 2), audit
 
 
@@ -730,6 +775,8 @@ def evaluate_internal_split(args, frozen: dict, split: dict, frame_cache: dict,
                     "corner_status": (
                         "evaluated"
                         if corner_metrics is not None else
+                        "rgb_grid_quality_rejected"
+                        if detection_audit["raw_detector_detected"] else
                         "rgb_grid_not_detected"
                     ),
                 })
@@ -826,6 +873,10 @@ def evaluate_internal_split(args, frozen: dict, split: dict, frame_cache: dict,
             ),
         })
 
+        raw_detected_corner_frames = [
+            item for item in corner_frame_records
+            if item["rgb_detection"]["raw_detector_detected"]
+        ]
         detected_corner_frames = [
             item for item in corner_frame_records if item["metrics"] is not None
         ]
@@ -898,6 +949,7 @@ def evaluate_internal_split(args, frozen: dict, split: dict, frame_cache: dict,
             "dataset": name,
             "distance_ft": spec["distance_ft"],
             "attempted_validation_frames": len(corner_frame_records),
+            "frames_with_raw_11x17_rgb_detector_result": len(raw_detected_corner_frames),
             "frames_with_independent_11x17_rgb_detection": len(detected_corner_frames),
             "known_physical_inner_corners_attempted_per_frame": (
                 CHECKERBOARD_INNER_COLUMNS * CHECKERBOARD_INNER_ROWS
@@ -946,8 +998,11 @@ def evaluate_internal_split(args, frozen: dict, split: dict, frame_cache: dict,
                 ),
                 "rgb_corners": (
                     "cv2.findChessboardCornersSB on an original-resolution "
-                    "grayscale camera-only ROI"
+                    "grayscale camera-only ROI, followed by an RGB-only neighbour-"
+                    "spacing regularity gate requiring every horizontal/vertical "
+                    "spacing to be 0.5--1.5x its orientation median"
                 ),
+                "rgb_grid_quality_gate_uses_lidar_or_error": False,
                 "frozen_transform_refitted": False,
                 "K_and_D_fixed": True,
                 "rgb_mask_used": False,
@@ -1006,6 +1061,10 @@ def diagnostic_results(frozen: dict, internal: dict, context: dict) -> dict:
         str(item["distance_ft"]): item["directional_consistency_0_random_1_uniform"]
         for item in internal["per_distance"]
     }
+    near_corner = next(
+        item for item in internal["corner_validation"]["per_distance"]
+        if item["distance_ft"] == 7.25
+    )
     return {
         "timestamp_synchronization": {
             "result_by_distance": [item["timestamp"] for item in distance_diagnostics],
@@ -1103,8 +1162,13 @@ def diagnostic_results(frozen: dict, internal: dict, context: dict) -> dict:
             "method": internal["corner_validation"]["method"],
             "result_by_distance": internal["corner_validation"]["per_distance"],
             "conclusion": (
-                "Independent 11x17 RGB corners were detected in only 3/10 near "
-                "validation frames and 0/10 middle/far frames. The supplied "
+                "The raw 11x17 detector returned grids in "
+                f"{near_corner['frames_with_raw_11x17_rgb_detector_result']}/10 near "
+                "validation frames; the transform-blind RGB regularity gate accepted "
+                f"{near_corner['frames_with_independent_11x17_rgb_detection']}/10. "
+                "One raw result skipped a physical row and was rejected as a complete "
+                "frame before any reprojection comparison. No middle/far grid was detected. "
+                "The supplied "
                 "middle/far images therefore cannot distinguish extrinsic error "
                 "from point/reference correspondence uncertainty using inner-corner "
                 "statistics; no unavailable corner errors are invented."
@@ -1220,6 +1284,7 @@ def write_outputs(args, report: dict, frozen: dict, internal: dict):
         corner["per_distance"],
         [
             "dataset", "distance_ft", "attempted_validation_frames",
+            "frames_with_raw_11x17_rgb_detector_result",
             "frames_with_independent_11x17_rgb_detection",
             "known_physical_inner_corners_attempted_per_frame",
             "independently_evaluated_corners", "mean_reprojection_error_px",
@@ -1241,7 +1306,16 @@ def write_outputs(args, report: dict, frozen: dict, internal: dict):
                 "evaluation_frame_index": frame["evaluation_frame_index"],
                 "lidar_frame_index": frame["lidar_frame_index"],
                 "rgb_frame_index": frame["rgb_frame_index"],
-                "rgb_corners_detected": detection["detected"],
+                "raw_rgb_grid_detected": detection["raw_detector_detected"],
+                "rgb_grid_regularity_pass": detection["detected"],
+                "minimum_neighbor_spacing_ratio": (
+                    detection.get("rgb_only_grid_regularity", {})
+                    .get("minimum_observed_neighbor_ratio")
+                ),
+                "maximum_neighbor_spacing_ratio": (
+                    detection.get("rgb_only_grid_regularity", {})
+                    .get("maximum_observed_neighbor_ratio")
+                ),
                 "square_pitch_x_px": detection["estimated_square_pitch_xy_px"][0],
                 "square_pitch_y_px": detection["estimated_square_pitch_xy_px"][1],
                 "evaluated_corners": metrics.get("evaluated_lidar_points", 0),
@@ -1253,8 +1327,10 @@ def write_outputs(args, report: dict, frozen: dict, internal: dict):
         corner_detection_rows,
         [
             "dataset", "distance_ft", "evaluation_frame_index",
-            "lidar_frame_index", "rgb_frame_index", "rgb_corners_detected",
-            "square_pitch_x_px", "square_pitch_y_px", "evaluated_corners",
+            "lidar_frame_index", "rgb_frame_index", "raw_rgb_grid_detected",
+            "rgb_grid_regularity_pass", "minimum_neighbor_spacing_ratio",
+            "maximum_neighbor_spacing_ratio", "square_pitch_x_px",
+            "square_pitch_y_px", "evaluated_corners",
             "rmse_reprojection_error_px", "failure_reason",
         ],
     )
