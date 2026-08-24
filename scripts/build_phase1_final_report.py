@@ -224,11 +224,14 @@ def build_report(report_path: Path, output_path: Path):
         ["Per-distance timestamp summary", "Complete", "Mean, median, minimum, and maximum absolute differences"],
         ["30 frame-level metric rows", "Complete", "Count, mean, median, RMSE, std, max, <=1/2/3 px"],
         ["Error-vector visualization", "Complete", "One representative measured plot per distance"],
+        ["Independent checkerboard corners", "Diagnostic complete", "5,610 attempted corner rows; middle/far RGB grids unresolved"],
+        ["Optimization mathematics", "Complete", "Loss, variables, fixed K/D, initialization, solver, tolerances, iterations, frames"],
         ["Rotation validation", "Complete", "R^T R, orthogonality error, determinant, and decision"],
         ["Original RGB preserved", "Complete", "No validation resize/warp; masks remain separate"],
         ["Public/internal separation", "Complete", "Independent transforms, splits, outputs, and metrics"],
         ["New controlled static validation", "Open", "Requires new physical acquisition; not present in supplied bags"],
         ["Larger board at 22-30 ft", "Open", "Requires new physical acquisition after diagnostics"],
+        ["Root cause at failing distances", "Open", "Corner grid is not independently observable in current middle/far RGB"],
         ["99% within 2 px at every distance", "Fail", "14.5 ft and 22.2 ft do not meet the criterion"],
     ]
     add_table(
@@ -425,7 +428,47 @@ def build_report(report_path: Path, output_path: Path):
     add_body(doc, f"Camera axes: {convention['camera_optical_axes']}", bold_prefix="Camera axes:")
     add_body(doc, f"Pixel convention: {convention['pixel_origin']}", bold_prefix="Pixel convention:")
 
-    add_heading(doc, "7.3 Rotation-matrix validity", 2)
+    add_heading(doc, "7.3 Calibration optimization mathematics", 2)
+    optimization = report["calibration_optimization_documentation"]
+    add_code(doc, optimization["objective"] + "\n\n" + optimization["residual_definition"])
+    add_table(
+        doc,
+        ["Item", "Exact implementation"],
+        [
+            ["Optimized variables", "Rodrigues rotation r (3) and translation t in metres (3): 6 scalar variables"],
+            ["Fixed values", "Recorded K and D, LiDAR physical corner coordinates, and RGB corner observations"],
+            ["Initialization", optimization["initialization"]],
+            ["Algorithm", "SciPy least_squares, trust-region reflective, 2-point finite-difference Jacobian, soft-L1 loss, f_scale=1 px"],
+            ["Convergence", "xtol=ftol=gtol=1e-13; maximum 5,000 function evaluations"],
+            ["Calibration observations", f"{optimization['calibration_corner_observations']} outer corners / {optimization['scalar_pixel_residuals']} scalar pixel residuals"],
+            ["Calibration-frame rule", "LiDAR frame_index % 4 == 0; RGB frame 0 at each distance; no validation frames"],
+        ],
+        [2600, 6760],
+        body_size=8.1,
+        left_columns=(0, 1),
+    )
+    convergence = optimization["convergence_result"]
+    add_table(
+        doc,
+        ["Convergence output", "Measured value"],
+        [
+            ["Success / termination", f"{convergence['success']} — {convergence['message']}"],
+            ["Trust-region iterations", convergence["trust_region_iterations"]],
+            ["Function / Jacobian evaluations", f"{convergence['function_evaluations']} / {convergence['jacobian_evaluations']}"],
+            ["First-order optimality", f"{convergence['first_order_optimality']:.6e}"],
+            ["Initial / final robust cost", f"{convergence['initial_robust_cost']:.6f} / {convergence['final_robust_cost']:.6f}"],
+        ],
+        [3400, 5960],
+        body_size=8.3,
+        left_columns=(0, 1),
+    )
+    add_body(
+        doc,
+        "K and D remain fixed. The optimization uses only calibration observations and "
+        "does not reopen or refit against any validation result.",
+    )
+
+    add_heading(doc, "7.4 Rotation-matrix validity", 2)
     rotation = report["diagnostics"]["rotation_matrix"]
     add_code(doc, "R^T R =\n" + fmt_matrix(rotation["R_transpose_R"], 12))
     add_table(
@@ -465,6 +508,7 @@ def build_report(report_path: Path, output_path: Path):
         "temporal_motion": "Temporal motion/staticity",
         "reference_pixel_calculation": "Reference-pixel calculation",
         "error_vector_direction": "Error-vector direction",
+        "independent_checkerboard_corner_validation": "Independent checkerboard corners",
     }
     for key, label in labels.items():
         diagnosis_rows.append([label, "Completed", diagnostics[key]["conclusion"]])
@@ -520,7 +564,113 @@ def build_report(report_path: Path, output_path: Path):
         )
 
     page_break(doc)
-    add_heading(doc, "9. Controlled static and larger-board experiments", 1)
+    add_heading(doc, "9. Independent checkerboard-corner validation", 1)
+    corner_validation = report["independent_checkerboard_corner_validation"]
+    add_body(
+        doc,
+        "For every validation frame, 187 known physical 11x17 inner corners are constructed "
+        "from the LiDAR-only board plane and declared 12x18-square, 25 mm geometry. The frozen "
+        "transform projects those points into RGB. OpenCV then attempts an independent 11x17 "
+        "detection using only an original-resolution camera ROI; no mask, resize, warp, or "
+        "LiDAR projection guides RGB detection.",
+    )
+
+    def corner_value(item, key, precision=3, percent=False):
+        value = item[key]
+        if value is None:
+            return "N/A"
+        suffix = "%" if percent else ""
+        return f"{value:.{precision}f}{suffix}"
+
+    corner_rows = []
+    for item in corner_validation["per_distance"]:
+        available = item["frames_with_independent_11x17_rgb_detection"] > 0
+        corner_rows.append([
+            f"{item['distance_ft']:g} ft",
+            item["attempted_validation_frames"],
+            item["frames_with_independent_11x17_rgb_detection"],
+            item["independently_evaluated_corners"],
+            corner_value(item, "mean_reprojection_error_px"),
+            corner_value(item, "median_reprojection_error_px"),
+            corner_value(item, "rmse_reprojection_error_px"),
+            corner_value(item, "standard_deviation_reprojection_error_px"),
+            corner_value(item, "maximum_reprojection_error_px"),
+            corner_value(item, "percentage_within_1_px", 2, True),
+            corner_value(item, "percentage_within_2_px", 2, True),
+            corner_value(item, "percentage_within_3_px", 2, True),
+            "Available" if available else "Unavailable — unresolved RGB grid",
+        ])
+    add_table(
+        doc,
+        ["Distance", "Tried", "Detected", "Corners", "Mean", "Median", "RMSE", "Std", "Max", "<=1", "<=2", "<=3", "Status"],
+        corner_rows,
+        [700, 550, 550, 650, 600, 600, 600, 600, 600, 600, 600, 600, 2110],
+        body_size=6.6,
+    )
+    add_callout(
+        doc,
+        "Corner result",
+        "At 7.25 ft, independent corners are available in 3/10 frames: 561 corners, "
+        "mean 0.380 px, median 0.253 px, RMSE 0.728 px, standard deviation 0.621 px, "
+        "maximum 4.901 px, and 98.04% within 1, 2, and 3 px. At 14.5 ft and "
+        "22.2 ft the original RGB grid resolves no complete 11x17 pattern, so numeric "
+        "corner errors are unavailable rather than fabricated.",
+        fill=PALE_BLUE,
+        color=DARK_BLUE,
+    )
+    add_body(
+        doc,
+        "The estimated square pitch is about 5.37x5.64 px at 7.25 ft, 2.33x2.38 px "
+        "at 14.5 ft, and 1.58x1.67 px at 22.2 ft. Consequently, this experiment does "
+        "not yet separate true extrinsic error from point/reference uncertainty at the "
+        "two failing distances. It instead proves why a larger, sharper target and new "
+        "capture are methodologically required.",
+    )
+
+    detection_rows = []
+    for distance in corner_validation["per_distance"]:
+        for frame in distance["per_frame"]:
+            detection = frame["rgb_detection"]
+            metrics = frame["metrics"]
+            detection_rows.append([
+                f"{distance['distance_ft']:g}",
+                frame["evaluation_frame_index"],
+                frame["rgb_frame_index"],
+                "Yes" if detection["detected"] else "No",
+                f"{detection['estimated_square_pitch_xy_px'][0]:.2f} x {detection['estimated_square_pitch_xy_px'][1]:.2f}",
+                0 if metrics is None else metrics["evaluated_lidar_points"],
+                "N/A" if metrics is None else f"{metrics['rmse_reprojection_error_px']:.3f}",
+                "evaluated" if metrics is not None else "11x17 grid not resolved",
+            ])
+    add_heading(doc, "9.1 Detection status for all 30 validation frames", 2)
+    add_table(
+        doc,
+        ["ft", "Eval", "RGB", "Detected", "Square pitch px", "Corners", "RMSE", "Status"],
+        detection_rows,
+        [750, 500, 650, 650, 1700, 900, 1100, 3110],
+        body_size=7.0,
+    )
+    add_body(
+        doc,
+        "The companion corner_individual_errors.csv contains 5,610 attempted corner rows "
+        "(30 frames x 187 corners). It reports physical LiDAR XYZ and projected u,v for every "
+        "row, plus independently detected u,v and error for the 561 observable corners. "
+        "Unavailable detections are explicitly marked rgb_grid_not_detected.",
+    )
+
+    for index, figure in enumerate(corner_validation["figures"], start=1):
+        page_break(doc)
+        add_heading(doc, f"9.{index + 1} Corner observability — {figure['distance_ft']:g} ft", 2)
+        add_figure(
+            doc,
+            Path(figure["output"]),
+            f"Figure {index + 3}. Independent physical-corner projection and RGB-corner "
+            f"observability at {figure['distance_ft']:g} ft.",
+            f"Independent checkerboard-corner validation at {figure['distance_ft']:g} feet.",
+        )
+
+    page_break(doc)
+    add_heading(doc, "10. Controlled static and larger-board experiments", 1)
     controlled = diagnostics["controlled_static_experiment"]
     larger = diagnostics["larger_far_range_checkerboard"]
     add_callout(doc, "Controlled static experiment", controlled["conclusion"], fill=PALE_RED, color=RED)
@@ -542,7 +692,7 @@ def build_report(report_path: Path, output_path: Path):
     )
 
     page_break(doc)
-    add_heading(doc, "10. Qualitative measured outputs", 1)
+    add_heading(doc, "11. Qualitative measured outputs", 1)
     add_body(
         doc,
         "Each projection figure uses the untouched original RGB pixel grid and measured LiDAR "
@@ -561,12 +711,12 @@ def build_report(report_path: Path, output_path: Path):
         add_figure(
             doc,
             path,
-            f"Figure {index + 3}. {label}. Original RGB, board reference, projected measured returns, and error evidence.",
+            f"Figure {index + 6}. {label}. Original RGB, board reference, projected measured returns, and error evidence.",
             f"{label} camera-LiDAR checkerboard projection output.",
         )
 
     page_break(doc)
-    add_heading(doc, "11. Reproducible pipeline and attached outputs", 1)
+    add_heading(doc, "12. Reproducible pipeline and attached outputs", 1)
     for step in [
         "Read real raw ROS 2 RGB, CameraInfo, and Livox point-cloud messages.",
         "Create deterministic disjoint calibration, validation, and unused frame sets.",
@@ -575,6 +725,7 @@ def build_report(report_path: Path, output_path: Path):
         "Independently select board returns from each validation frame in LiDAR coordinates.",
         "Pair the nearest original RGB timestamp and calculate independent reference pixels.",
         "Project measured returns and write all requested aggregate/per-frame metrics and vectors.",
+        "Project 187 known physical inner corners per validation frame and independently detect RGB corners without using LiDAR or masks.",
         "Run the separate ACSC external split without pooling its outputs with internal results.",
         "Build this report and package the result files, images, code, and provenance manifest.",
     ]:
@@ -595,6 +746,9 @@ def build_report(report_path: Path, output_path: Path):
         "internal_multiframe_metrics.csv - three-distance aggregate metrics",
         "timestamp_pairs.csv and timestamp_summary.csv - explicit synchronization evidence",
         "diagnostic_summary.csv - conclusion for every diagnostic category",
+        "corner_metrics.csv and corner_detection_status.csv - corner aggregate and all-frame observability results",
+        "corner_individual_errors.csv - every one of the 5,610 attempted physical corners",
+        "corner_validation/ - one independent corner-observability figure per distance",
         "data_provenance.json - real-data identity, paths, topics, and public source links",
         "error_vectors/ - one representative vector plot per internal distance",
         "qualitative/ and public_external/qualitative/ - original RGB, separate masks, and projections",
@@ -602,7 +756,7 @@ def build_report(report_path: Path, output_path: Path):
     ]:
         add_bullet(doc, item)
 
-    add_heading(doc, "12. Final decision", 1)
+    add_heading(doc, "13. Final decision", 1)
     add_body(
         doc,
         "The strict reproducible correction/diagnostic work that can be performed on the supplied "

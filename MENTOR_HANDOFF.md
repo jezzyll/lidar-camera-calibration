@@ -8,6 +8,10 @@ calibration/validation frame split, explicit RGB/LiDAR timestamp evidence, all
 rotation-matrix validation, systematic-error diagnostics, original-grid
 qualitative outputs, and a reproducible evidence package.
 
+The final methodological addition is also implemented: independent projection
+of all 187 known physical inner corners per validation frame, camera-only RGB
+corner detection, per-corner output, and full optimization mathematics.
+
 The current transform still fails the project-defined acceptance requirement
 at 14.5 ft and 22.2 ft. A new controlled capture and larger target at 22–30 ft
 also require physical data acquisition and are not falsely marked complete.
@@ -52,6 +56,32 @@ The small middle/far targets use manual original-grid boundaries, so improved
 independent target observations are required before attributing all error to
 `R` or `t` alone.
 
+## Independent corner result
+
+| Distance | Frames attempted/detected | Evaluated corners | Mean px | RMSE px | Std px | Max px | ≤2 px |
+|---:|:---:|---:|---:|---:|---:|---:|---:|
+| 7.25 ft | 10 / 3 | 561 | 0.380 | 0.728 | 0.621 | 4.901 | 98.04% |
+| 14.5 ft | 10 / 0 | 0 | N/A | N/A | N/A | N/A | N/A |
+| 22.2 ft | 10 / 0 | 0 | N/A | N/A | N/A | N/A | N/A |
+
+At 14.5 ft the square pitch is only about 2.33×2.38 px; at 22.2 ft it is
+about 1.58×1.67 px. The complete 11×17 RGB grid is not independently resolved
+in any middle/far frame, so corner statistics cannot honestly decide between
+extrinsic error and correspondence uncertainty from these recordings.
+
+`corner_individual_errors.csv` contains all 5,610 attempted physical corners;
+561 have independently detected RGB coordinates/errors and the unavailable
+rows are explicitly marked.
+
+## Optimization documentation
+
+The report now provides the exact soft-L1 objective, 6 optimized variables,
+fixed `K,D`, near-pose initialization, trust-region-reflective algorithm,
+finite-difference Jacobian, tolerances, calibration-frame rule, and actual
+convergence: 8 iterations, 12 function evaluations, 9 Jacobian evaluations,
+and `ftol` termination. No validation frame is used and no post-validation
+transform adjustment is performed.
+
 ## Public external result
 
 The public experiment uses the real
@@ -65,7 +95,7 @@ internal results are separate and are never pooled.
 Send these two files together:
 
 1. `deliverables/Phase1_Final_Corrections_Evidence_Report.docx` — the full
-   technical report with all required tables and 12 measured-output figures
+   technical report with all required tables and 15 measured-output figures
    embedded.
 2. `deliverables/Phase1_Final_Corrections_Evidence_Package.zip` — the report,
    derived dataset outputs, 30-frame CSV, timestamps, calibration files,

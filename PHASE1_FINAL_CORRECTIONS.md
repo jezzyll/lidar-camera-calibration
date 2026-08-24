@@ -87,6 +87,40 @@ All 30 frame rows are in
 `outputs/phase1_final/frame_level_error_metrics.csv` and are embedded in the
 Word report.
 
+## Independent checkerboard-corner validation
+
+The frozen transform is also tested with known physical checkerboard corners:
+
+1. For every validation LiDAR frame, construct all 187 known 11×17 inner-corner
+   XYZ coordinates from the LiDAR-only plane and the declared 12×18-square,
+   25 mm geometry.
+2. Project those coordinates with the unchanged `K`, `D`, `R`, and `t`.
+3. Independently run `cv2.findChessboardCornersSB` in an
+   original-resolution, camera-only grayscale ROI.
+4. Do not use an RGB mask, projected LiDAR pixels, resizing, or warping to
+   guide the RGB detector.
+5. Report error only where the complete 11×17 RGB grid is independently
+   resolved.
+
+| Distance | Frames attempted | Frames detected | Corners evaluated | Mean px | Median px | RMSE px | Std px | Max px | ≤1 px | ≤2 px | ≤3 px |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 7.25 ft | 10 | 3 | 561 | 0.380 | 0.253 | 0.728 | 0.621 | 4.901 | 98.04% | 98.04% | 98.04% |
+| 14.5 ft | 10 | 0 | 0 | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
+| 22.2 ft | 10 | 0 | 0 | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
+
+The estimated square pitch is approximately 5.37×5.64 px at 7.25 ft,
+2.33×2.38 px at 14.5 ft, and 1.58×1.67 px at 22.2 ft. No complete 11×17 grid
+is resolved in any middle/far validation frame. Therefore the current capture
+cannot use inner-corner statistics to distinguish extrinsic error from
+LiDAR-point/reference uncertainty at the failing distances. Numeric values are
+not fabricated for undetected corners.
+
+`outputs/phase1_final/corner_individual_errors.csv` contains 5,610 attempted
+corner rows (30 frames × 187): physical XYZ and projected RGB coordinates for
+every corner, plus detected RGB coordinates and error for all 561 independently
+observable near-range corners. Detection availability for all 30 frames is in
+`corner_detection_status.csv`, and three figures are in `corner_validation/`.
+
 ## Timestamp evidence
 
 Every pair's native LiDAR and RGB timestamps, frame indices, signed difference,
@@ -140,6 +174,41 @@ translation: metres
 pixel origin: top-left; u right, v down
 ```
 
+## Calibration optimization mathematics
+
+For each of the 12 calibration outer-board corners, let `P_k` be the fixed
+LiDAR 3D coordinate and `q_k` its fixed RGB observation. With Rodrigues vector
+`r` and translation `t`:
+
+```text
+q_hat_k(r,t) = project(K, D, R(r), t, P_k)
+f_k(r,t) = [q_hat_k.u - q_k.u, q_hat_k.v - q_k.v]
+
+minimize F(r,t) = 1/2 * sum_j rho(f_j(r,t)^2)
+rho(z) = 2 * (sqrt(1 + z) - 1)       # soft-L1, f_scale = 1 px
+```
+
+- optimized variables: 3-component Rodrigues rotation and 3-component
+  translation, six scalar variables total;
+- fixed: recorded `K`, recorded `D`, LiDAR board-corner coordinates, and RGB
+  corner observations;
+- initialization:
+  `R0 = R_board_camera * R_board_lidar^T` and
+  `t0 = center_camera - R0*center_lidar` from the near calibration pose;
+- algorithm: `scipy.optimize.least_squares`, trust-region reflective (`trf`),
+  2-point finite-difference Jacobian, soft-L1 loss;
+- convergence configuration: `xtol=ftol=gtol=1e-13`, `max_nfev=5000`;
+- actual convergence: success by `ftol`, 8 trust-region iterations, 12
+  function evaluations, 9 Jacobian evaluations, first-order optimality
+  `5.637485e-06`;
+- robust cost: 59.583930 initially and 21.312369 finally;
+- calibration frames: LiDAR `frame_index % 4 == 0` and RGB frame 0 at each
+  distance;
+- validation frames used by optimization: none.
+
+The transform is not modified after this solve to improve any validation
+percentage.
+
 ## Rotation validation
 
 ```text
@@ -187,6 +256,10 @@ All requested causes were checked:
 - **Error direction:** vector consistency is about 0.99 at both failing
   distances, which supports systematic geometry/reference bias instead of
   random point noise.
+- **Independent checkerboard corners:** 561 near corners are evaluated, but no
+  complete 11×17 grid is independently resolved at 14.5 ft or 22.2 ft. The
+  failing-distance root cause therefore remains unresolved between extrinsic
+  error and reference-correspondence uncertainty until the new capture.
 
 | Distance | Mean vector `(du,dv)` px | Vector magnitude px | Direction consistency | Dominant image angle |
 |---:|:---:|---:|---:|---:|
@@ -251,6 +324,10 @@ Primary outputs:
 - `outputs/phase1_final/internal_multiframe_metrics.csv`;
 - `outputs/phase1_final/timestamp_pairs.csv` and `timestamp_summary.csv`;
 - `outputs/phase1_final/diagnostic_summary.csv`;
+- `outputs/phase1_final/corner_metrics.csv`;
+- `outputs/phase1_final/corner_detection_status.csv`;
+- `outputs/phase1_final/corner_individual_errors.csv`;
+- `outputs/phase1_final/corner_validation/`;
 - `outputs/phase1_final/data_provenance.json`;
 - `outputs/phase1_final/error_vectors/`;
 - `outputs/phase1_final/qualitative/`;

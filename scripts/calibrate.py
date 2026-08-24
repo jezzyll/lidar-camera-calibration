@@ -11,7 +11,10 @@ recording, so the final solve contains a calibration constraint in the requested
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
+import re
 from pathlib import Path
 
 import cv2
@@ -205,8 +208,15 @@ def project(points: np.ndarray, R: np.ndarray, t: np.ndarray, K: np.ndarray, D: 
     )[0].reshape(-1, 2)
 
 
-def refine_extrinsic(initial_R, initial_t, observations, K, D):
-    """Jointly fit the transform to the board boundaries at every range."""
+def refine_extrinsic(initial_R, initial_t, observations, K, D,
+                     return_diagnostics=False):
+    """Jointly fit the transform to the board boundaries at every range.
+
+    When requested, return the exact objective/solver configuration and the
+    convergence counters from this solve. SciPy 1.13 does not expose its
+    internal trust-region iteration counter in ``OptimizeResult``, so the
+    iteration number is captured from the solver's own verbose iteration table.
+    """
     object_points = np.concatenate([item["lidar_corners"] for item in observations])
     image_points = np.concatenate([item["camera_corners"] for item in observations])
     initial = np.r_[cv2.Rodrigues(initial_R)[0].ravel(), initial_t]
@@ -217,17 +227,92 @@ def refine_extrinsic(initial_R, initial_t, observations, K, D):
         )[0].reshape(-1, 2)
         return (projected - image_points).ravel()
 
-    fitted = least_squares(
-        residual, initial, loss="soft_l1", f_scale=1.0, max_nfev=5000,
-        xtol=1e-13, ftol=1e-13, gtol=1e-13,
-    )
+    trace = io.StringIO()
+    with contextlib.redirect_stdout(trace):
+        fitted = least_squares(
+            residual, initial, method="trf", jac="2-point",
+            loss="soft_l1", f_scale=1.0, max_nfev=5000,
+            xtol=1e-13, ftol=1e-13, gtol=1e-13,
+            verbose=2 if return_diagnostics else 0,
+        )
     if not fitted.success:
         raise RuntimeError(f"Multi-range extrinsic refinement failed: {fitted.message}")
     R = cv2.Rodrigues(fitted.x[:3])[0]
     t = fitted.x[3:]
     projected = project(object_points, R, t, K, D)
     errors = np.linalg.norm(projected - image_points, axis=1)
-    return R, t, float(np.sqrt(np.mean(errors ** 2))), errors
+    result = (R, t, float(np.sqrt(np.mean(errors ** 2))), errors)
+    if not return_diagnostics:
+        return result
+
+    iteration_numbers = []
+    for line in trace.getvalue().splitlines():
+        match = re.match(r"\s*(\d+)\s+\d+\s+", line)
+        if match:
+            iteration_numbers.append(int(match.group(1)))
+
+    def robust_cost(values):
+        squared = np.asarray(values, dtype=np.float64) ** 2
+        rho = 2.0 * (np.sqrt(1.0 + squared) - 1.0)
+        return float(0.5 * np.sum(rho))
+
+    diagnostics = {
+        "objective": (
+            "minimize F(r,t) = 1/2 * sum_j rho(f_j(r,t)^2), where each "
+            "f_j is a projected-minus-observed pixel component (du or dv), "
+            "rho(z)=2*(sqrt(1+z)-1), and f_scale=1 px"
+        ),
+        "residual_definition": (
+            "for each calibration board corner k: q_hat_k = project(K,D,R(r),t,P_k); "
+            "residual components are [q_hat_k.u-q_k.u, q_hat_k.v-q_k.v]"
+        ),
+        "optimized_variables": {
+            "rotation": "3-component Rodrigues/axis-angle vector r",
+            "translation": "3-component translation vector t in metres",
+            "total_scalar_variables": 6,
+        },
+        "fixed_variables": {
+            "camera_intrinsic_matrix_K": True,
+            "distortion_coefficients_D": True,
+            "lidar_board_corner_coordinates": True,
+            "camera_board_corner_observations": True,
+        },
+        "initialization": (
+            "near-pose board-frame alignment: R0 = R_board_camera * "
+            "R_board_lidar^T; t0 = center_camera - R0*center_lidar"
+        ),
+        "algorithm": {
+            "library": "scipy.optimize.least_squares",
+            "method": "trust-region reflective (trf)",
+            "jacobian": "2-point finite difference",
+            "robust_loss": "soft_l1",
+            "f_scale_px": 1.0,
+        },
+        "convergence_configuration": {
+            "xtol": 1e-13,
+            "ftol": 1e-13,
+            "gtol": 1e-13,
+            "maximum_function_evaluations": 5000,
+        },
+        "convergence_result": {
+            "success": bool(fitted.success),
+            "status": int(fitted.status),
+            "message": str(fitted.message),
+            "trust_region_iterations": (
+                max(iteration_numbers) if iteration_numbers else None
+            ),
+            "function_evaluations": int(fitted.nfev),
+            "jacobian_evaluations": (
+                None if fitted.njev is None else int(fitted.njev)
+            ),
+            "first_order_optimality": float(fitted.optimality),
+            "initial_robust_cost": robust_cost(residual(initial)),
+            "final_robust_cost": float(fitted.cost),
+        },
+        "calibration_corner_observations": int(len(object_points)),
+        "scalar_pixel_residuals": int(2 * len(object_points)),
+    }
+    return (*result, diagnostics)
 
 
 def main():

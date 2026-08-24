@@ -58,6 +58,10 @@ VALIDATION_FRAME_COUNT = 10
 CALIBRATION_MODULUS = 4
 CALIBRATION_REMAINDER = 0
 VALIDATION_REMAINDER = 2
+CHECKERBOARD_INNER_COLUMNS = 11
+CHECKERBOARD_INNER_ROWS = 17
+CHECKERBOARD_PHYSICAL_COLUMNS = 12
+CHECKERBOARD_PHYSICAL_ROWS = 18
 
 
 def json_ready(value):
@@ -231,8 +235,9 @@ def calibrate_from_split(data_root: Path) -> tuple[dict, dict, dict, dict]:
     near_model = calibration_board_models[near_name]
     initial_r = r_board_camera @ near_model["rotation"].T
     initial_t = center_camera - initial_r @ near_model["center"]
-    rotation, translation, joint_rmse, corner_errors = refine_extrinsic(
+    rotation, translation, joint_rmse, corner_errors, optimization = refine_extrinsic(
         initial_r, initial_t, observations, near_k, near_d,
+        return_diagnostics=True,
     )
     transform = np.eye(4)
     transform[:3, :3] = rotation
@@ -281,6 +286,23 @@ def calibrate_from_split(data_root: Path) -> tuple[dict, dict, dict, dict]:
         "quality": {
             "camera_checkerboard_reprojection_rmse_px": camera_rmse,
             "calibration_joint_board_corner_reprojection_rmse_px": joint_rmse,
+        },
+        "optimization_documentation": {
+            **optimization,
+            "K_and_D_fixed": True,
+            "validation_frames_used": False,
+            "calibration_frame_selection": {
+                name: {
+                    "lidar_rule": item["calibration_lidar_rule"],
+                    "lidar_indices": item["calibration_lidar_indices"],
+                    "rgb_frame_index": item["calibration_rgb_frame_index"],
+                }
+                for name, item in split.items()
+            },
+            "observation_design": (
+                "four physical outer checkerboard corners at each of the three "
+                "calibration distances; 12 corner observations / 24 scalar pixel residuals"
+            ),
         },
         "calibration_observations": observation_report,
         "split_contract": {
@@ -350,6 +372,158 @@ def select_validation_points(points: np.ndarray, spec: dict) -> tuple[np.ndarray
         "plane_coefficient": coefficient.tolist(),
         "board_center_lidar_m": board_center.tolist(),
     }
+
+
+def checkerboard_inner_corners_3d(coefficient: np.ndarray, spec: dict) -> np.ndarray:
+    """Construct the known 11x17 physical inner corners in LiDAR coordinates."""
+    outer = lidar_board_corners(coefficient, spec["y"], spec["z"])
+    top_left, top_right, _, bottom_left = outer
+    rows = []
+    for row in range(1, CHECKERBOARD_INNER_ROWS + 1):
+        vertical = row / CHECKERBOARD_PHYSICAL_ROWS
+        for column in range(1, CHECKERBOARD_INNER_COLUMNS + 1):
+            horizontal = column / CHECKERBOARD_PHYSICAL_COLUMNS
+            rows.append(
+                top_left
+                + horizontal * (top_right - top_left)
+                + vertical * (bottom_left - top_left)
+            )
+    return np.asarray(rows, dtype=np.float64)
+
+
+def checkerboard_square_pitch(polygon: np.ndarray) -> tuple[float, float]:
+    top_left, top_right, bottom_right, bottom_left = polygon
+    width = 0.5 * (
+        np.linalg.norm(top_right - top_left)
+        + np.linalg.norm(bottom_right - bottom_left)
+    )
+    height = 0.5 * (
+        np.linalg.norm(bottom_left - top_left)
+        + np.linalg.norm(bottom_right - top_right)
+    )
+    return (
+        float(width / CHECKERBOARD_PHYSICAL_COLUMNS),
+        float(height / CHECKERBOARD_PHYSICAL_ROWS),
+    )
+
+
+def detect_independent_rgb_corners(rgb: np.ndarray, dataset: str,
+                                   camera_polygon: np.ndarray):
+    """Detect RGB corners without using projected LiDAR pixels or an RGB mask.
+
+    Detection runs on the original-resolution grayscale grid. A fixed
+    camera-only search ROI removes unrelated architectural corners. No resize,
+    warp, interpolation, LiDAR projection, or mask guides the detector.
+    """
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    if dataset == "dataset02 7.25feet":
+        x1, y1, x2, y2 = 238, 30, 326, 160
+    else:
+        minimum = np.floor(camera_polygon.min(axis=0)).astype(int)
+        maximum = np.ceil(camera_polygon.max(axis=0)).astype(int)
+        span = maximum - minimum
+        padding = np.maximum(4, np.ceil(0.15 * span).astype(int))
+        x1, y1 = np.maximum(0, minimum - padding)
+        x2, y2 = np.minimum(
+            np.asarray([gray.shape[1], gray.shape[0]]), maximum + padding + 1,
+        )
+    roi = gray[y1:y2, x1:x2]
+    flags = (
+        cv2.CALIB_CB_EXHAUSTIVE
+        | cv2.CALIB_CB_ACCURACY
+        | cv2.CALIB_CB_NORMALIZE_IMAGE
+    )
+    detected, corners = cv2.findChessboardCornersSB(
+        roi,
+        (CHECKERBOARD_INNER_COLUMNS, CHECKERBOARD_INNER_ROWS),
+        flags,
+    )
+    pitch_x, pitch_y = checkerboard_square_pitch(camera_polygon)
+    audit = {
+        "detector": "cv2.findChessboardCornersSB",
+        "pattern_inner_columns_rows": [
+            CHECKERBOARD_INNER_COLUMNS, CHECKERBOARD_INNER_ROWS,
+        ],
+        "original_resolution_grayscale": True,
+        "search_roi_xyxy": [int(x1), int(y1), int(x2), int(y2)],
+        "image_resized_or_warped": False,
+        "rgb_mask_used": False,
+        "lidar_projection_used_to_detect": False,
+        "estimated_square_pitch_xy_px": [pitch_x, pitch_y],
+        "detected": bool(detected),
+    }
+    if not detected:
+        audit["failure_reason"] = (
+            "11x17 RGB corner grid not resolved in the original pixel grid; "
+            f"estimated square pitch is {pitch_x:.2f} x {pitch_y:.2f} px"
+        )
+        return None, audit
+
+    grid = corners.reshape(
+        CHECKERBOARD_INNER_ROWS, CHECKERBOARD_INNER_COLUMNS, 2,
+    ).astype(np.float64)
+    grid += np.asarray([x1, y1], dtype=np.float64)
+    if grid[0, :, 1].mean() > grid[-1, :, 1].mean():
+        grid = grid[::-1]
+    if grid[:, 0, 0].mean() > grid[:, -1, 0].mean():
+        grid = grid[:, ::-1]
+    return grid.reshape(-1, 2), audit
+
+
+def save_corner_validation_figure(image: np.ndarray, polygon: np.ndarray,
+                                  projected: np.ndarray,
+                                  detected: np.ndarray | None,
+                                  output: Path, title: str, audit: dict):
+    figure, axes = plt.subplots(1, 2, figsize=(13, 5.4), constrained_layout=True)
+    closed = np.vstack([polygon, polygon[0]])
+    for axis in axes:
+        axis.imshow(image)
+        axis.plot(closed[:, 0], closed[:, 1], color="yellow", linewidth=2,
+                  label="camera-only board ROI")
+        axis.scatter(projected[:, 0], projected[:, 1], s=13, facecolors="none",
+                     edgecolors="red", linewidths=0.8,
+                     label="projected physical corners")
+        if detected is not None:
+            axis.scatter(detected[:, 0], detected[:, 1], s=12, marker="x",
+                         c="lime", linewidths=0.8,
+                         label="independently detected RGB corners")
+        axis.axis("off")
+    axes[0].set_title("Original 640x480 RGB")
+    minimum = polygon.min(axis=0)
+    maximum = polygon.max(axis=0)
+    padding = np.maximum(8.0, 0.35 * (maximum - minimum))
+    axes[1].set_xlim(minimum[0] - padding[0], maximum[0] + padding[0])
+    axes[1].set_ylim(maximum[1] + padding[1], minimum[1] - padding[1])
+    if detected is not None:
+        errors = np.linalg.norm(projected - detected, axis=1)
+        indices = np.linspace(0, len(projected) - 1, 50, dtype=int)
+        axes[1].quiver(
+            detected[indices, 0], detected[indices, 1],
+            projected[indices, 0] - detected[indices, 0],
+            projected[indices, 1] - detected[indices, 1],
+            errors[indices], cmap="turbo", angles="xy", scale_units="xy",
+            scale=1.0, width=0.004,
+        )
+        axes[1].set_title(
+            f"187 detected corners | RMSE {np.sqrt(np.mean(errors ** 2)):.2f} px"
+        )
+    else:
+        axes[1].set_title("Independent RGB corners unavailable")
+        axes[1].text(
+            0.03, 0.96,
+            "Detector failed on original grid\n"
+            f"square pitch {audit['estimated_square_pitch_xy_px'][0]:.2f} x "
+            f"{audit['estimated_square_pitch_xy_px'][1]:.2f} px\n"
+            "corner metrics unavailable",
+            transform=axes[1].transAxes, ha="left", va="top",
+            fontsize=9, color="white",
+            bbox={"facecolor": "black", "alpha": 0.75, "pad": 4},
+        )
+    axes[1].legend(loc="lower right", fontsize=8)
+    figure.suptitle(title, fontsize=13, fontweight="bold")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    figure.savefig(output, dpi=180, bbox_inches="tight")
+    plt.close(figure)
 
 
 def vector_metrics(actual: np.ndarray, expected: np.ndarray) -> dict:
@@ -451,6 +625,9 @@ def evaluate_internal_split(args, frozen: dict, split: dict, frame_cache: dict,
     vector_figures = []
     timestamp_rows = []
     frame_rows = []
+    corner_rows = []
+    corner_per_distance = []
+    corner_figures = []
 
     for name, spec in sorted(CALIBRATION_POSES.items(), key=lambda pair: pair[1]["distance_ft"]):
         bag = args.internal_root / name
@@ -460,6 +637,7 @@ def evaluate_internal_split(args, frozen: dict, split: dict, frame_cache: dict,
         reference_rgb = context["rgb_references"][name]
         reference_polygon = context["calibration_board_models"][name]["camera_polygon"]
         frame_records = []
+        corner_frame_records = []
 
         for evaluation_index, frame in enumerate(frames):
             selected, normalized, lidar_audit = select_validation_points(
@@ -502,6 +680,74 @@ def evaluate_internal_split(args, frozen: dict, split: dict, frame_cache: dict,
                 "camera_polygon": polygon,
             }
             frame_records.append(record)
+
+            inner_lidar = checkerboard_inner_corners_3d(
+                np.asarray(lidar_audit["plane_coefficient"], dtype=np.float64),
+                spec,
+            )
+            projected_corners, corner_depth = camera_projection(
+                inner_lidar, rotation, translation, camera_k, distortion,
+            )
+            detected_corners, detection_audit = detect_independent_rgb_corners(
+                rgb["image"], name, polygon,
+            )
+            valid_corner_projection = bool(np.all(corner_depth > 0))
+            if detected_corners is not None and valid_corner_projection:
+                corner_metrics, corner_errors = error_metrics(
+                    projected_corners, detected_corners,
+                )
+            else:
+                corner_metrics = None
+                corner_errors = np.full(len(projected_corners), np.nan)
+            for corner_index, physical_corner in enumerate(inner_lidar):
+                row_index, column_index = divmod(
+                    corner_index, CHECKERBOARD_INNER_COLUMNS,
+                )
+                observed = (
+                    [None, None]
+                    if detected_corners is None
+                    else detected_corners[corner_index].tolist()
+                )
+                corner_rows.append({
+                    "dataset": name,
+                    "distance_ft": spec["distance_ft"],
+                    "evaluation_frame_index": evaluation_index,
+                    "lidar_frame_index": frame["index"],
+                    "rgb_frame_index": rgb["frame_index"],
+                    "corner_row_1_based": row_index + 1,
+                    "corner_column_1_based": column_index + 1,
+                    "lidar_x_m": physical_corner[0],
+                    "lidar_y_m": physical_corner[1],
+                    "lidar_z_m": physical_corner[2],
+                    "projected_u_px": projected_corners[corner_index, 0],
+                    "projected_v_px": projected_corners[corner_index, 1],
+                    "detected_u_px": observed[0],
+                    "detected_v_px": observed[1],
+                    "reprojection_error_px": (
+                        None if np.isnan(corner_errors[corner_index])
+                        else corner_errors[corner_index]
+                    ),
+                    "corner_status": (
+                        "evaluated"
+                        if corner_metrics is not None else
+                        "rgb_grid_not_detected"
+                    ),
+                })
+            corner_frame_records.append({
+                "evaluation_frame_index": evaluation_index,
+                "lidar_frame_index": frame["index"],
+                "rgb_frame_index": rgb["frame_index"],
+                "lidar_timestamp_ns": frame["timestamp_ns"],
+                "rgb_timestamp_ns": rgb["timestamp_ns"],
+                "known_physical_inner_corners_attempted": len(inner_lidar),
+                "all_projected_corners_positive_depth": valid_corner_projection,
+                "rgb_detection": detection_audit,
+                "metrics": corner_metrics,
+                "projected_pixels": projected_corners,
+                "detected_pixels": detected_corners,
+                "rgb_image": rgb["image"],
+                "camera_polygon": polygon,
+            })
             timestamp_rows.append({
                 "dataset": name,
                 "distance_ft": spec["distance_ft"],
@@ -580,6 +826,90 @@ def evaluate_internal_split(args, frozen: dict, split: dict, frame_cache: dict,
             ),
         })
 
+        detected_corner_frames = [
+            item for item in corner_frame_records if item["metrics"] is not None
+        ]
+        if detected_corner_frames:
+            all_projected = np.concatenate([
+                item["projected_pixels"] for item in detected_corner_frames
+            ])
+            all_detected = np.concatenate([
+                item["detected_pixels"] for item in detected_corner_frames
+            ])
+            aggregate_corner_metrics, _ = error_metrics(all_projected, all_detected)
+            corner_interpretation = (
+                "Independent RGB corner validation is available for the detected "
+                "validation frames; the frozen transform was not refitted."
+            )
+        else:
+            aggregate_corner_metrics = {
+                "evaluated_lidar_points": 0,
+                "mean_reprojection_error_px": None,
+                "median_reprojection_error_px": None,
+                "rmse_reprojection_error_px": None,
+                "standard_deviation_reprojection_error_px": None,
+                "maximum_reprojection_error_px": None,
+                "percentage_within_1_px": None,
+                "percentage_within_2_px": None,
+                "percentage_within_3_px": None,
+                "strict_same_raster_pixel_percentage": None,
+                "continuous_zero_error_percentage": None,
+                "passes_project_99pct_within_2px": False,
+            }
+            corner_interpretation = (
+                "UNAVAILABLE on the supplied original RGB frames: the 11x17 grid "
+                "was not independently resolved, so no corner-error statistic is "
+                "fabricated. A larger/sharper target capture is required."
+            )
+        representative_corner = (
+            detected_corner_frames[0]
+            if detected_corner_frames else corner_frame_records[0]
+        )
+        corner_figure_path = args.output_dir / "corner_validation" / (
+            f"corner_validation_{str(spec['distance_ft']).replace('.', '_')}ft.png"
+        )
+        save_corner_validation_figure(
+            representative_corner["rgb_image"],
+            representative_corner["camera_polygon"],
+            representative_corner["projected_pixels"],
+            representative_corner["detected_pixels"],
+            corner_figure_path,
+            f"Independent checkerboard-corner validation — {spec['distance_ft']:g} ft",
+            representative_corner["rgb_detection"],
+        )
+        corner_figures.append({
+            "dataset": name,
+            "distance_ft": spec["distance_ft"],
+            "evaluation_frame_index": representative_corner["evaluation_frame_index"],
+            "output": str(corner_figure_path),
+            "rgb_corners_detected": bool(
+                representative_corner["detected_pixels"] is not None
+            ),
+        })
+        clean_corner_frames = []
+        for item in corner_frame_records:
+            clean_corner_frames.append({
+                key: value for key, value in item.items()
+                if key not in {
+                    "projected_pixels", "detected_pixels", "rgb_image", "camera_polygon",
+                }
+            })
+        corner_per_distance.append({
+            "dataset": name,
+            "distance_ft": spec["distance_ft"],
+            "attempted_validation_frames": len(corner_frame_records),
+            "frames_with_independent_11x17_rgb_detection": len(detected_corner_frames),
+            "known_physical_inner_corners_attempted_per_frame": (
+                CHECKERBOARD_INNER_COLUMNS * CHECKERBOARD_INNER_ROWS
+            ),
+            "independently_evaluated_corners": aggregate_corner_metrics.pop(
+                "evaluated_lidar_points"
+            ),
+            **aggregate_corner_metrics,
+            "interpretation": corner_interpretation,
+            "per_frame": clean_corner_frames,
+        })
+
         clean_frames = []
         for record in frame_records:
             clean_frames.append({
@@ -607,6 +937,26 @@ def evaluate_internal_split(args, frozen: dict, split: dict, frame_cache: dict,
         "error_vector_figures": vector_figures,
         "timestamp_rows": timestamp_rows,
         "frame_rows": frame_rows,
+        "corner_validation": {
+            "method": {
+                "physical_corners": (
+                    "11x17 known inner-corner coordinates constructed from the "
+                    "LiDAR-only validation-frame plane and declared 12x18-square, "
+                    "25 mm checkerboard geometry"
+                ),
+                "rgb_corners": (
+                    "cv2.findChessboardCornersSB on an original-resolution "
+                    "grayscale camera-only ROI"
+                ),
+                "frozen_transform_refitted": False,
+                "K_and_D_fixed": True,
+                "rgb_mask_used": False,
+                "lidar_projection_used_to_detect_rgb_corners": False,
+            },
+            "per_distance": corner_per_distance,
+            "figures": corner_figures,
+            "individual_corner_rows": corner_rows,
+        },
     }
 
 
@@ -724,6 +1074,7 @@ def diagnostic_results(frozen: dict, internal: dict, context: dict) -> dict:
                 name: value["board_corner_reprojection_rmse_px"]
                 for name, value in frozen["calibration_observations"].items()
             },
+            "mathematical_documentation": frozen["optimization_documentation"],
             "conclusion": "The calibration-only multi-range objective cannot fit every annotated pose below 2 px; no post-validation refit or forced 99% correction was applied.",
         },
         "temporal_motion": {
@@ -747,6 +1098,17 @@ def diagnostic_results(frozen: dict, internal: dict, context: dict) -> dict:
         "error_vector_direction": {
             "directional_consistency_by_distance": vector_consistency,
             "conclusion": "High directional consistency at failing distances indicates systematic extrinsic/reference bias rather than random point noise. See the three vector figures.",
+        },
+        "independent_checkerboard_corner_validation": {
+            "method": internal["corner_validation"]["method"],
+            "result_by_distance": internal["corner_validation"]["per_distance"],
+            "conclusion": (
+                "Independent 11x17 RGB corners were detected in only 3/10 near "
+                "validation frames and 0/10 middle/far frames. The supplied "
+                "middle/far images therefore cannot distinguish extrinsic error "
+                "from point/reference correspondence uncertainty using inner-corner "
+                "statistics; no unavailable corner errors are invented."
+            ),
         },
         "controlled_static_experiment": {
             "completed_with_new_capture": False,
@@ -839,6 +1201,61 @@ def write_outputs(args, report: dict, frozen: dict, internal: dict):
             "median_absolute_difference_ms", "minimum_absolute_difference_ms",
             "maximum_absolute_difference_ms", "mean_signed_rgb_minus_lidar_ms",
             "error_vs_absolute_sync_delta_correlation",
+        ],
+    )
+    corner = internal["corner_validation"]
+    write_csv(
+        args.output_dir / "corner_individual_errors.csv",
+        corner["individual_corner_rows"],
+        [
+            "dataset", "distance_ft", "evaluation_frame_index",
+            "lidar_frame_index", "rgb_frame_index", "corner_row_1_based",
+            "corner_column_1_based", "lidar_x_m", "lidar_y_m", "lidar_z_m",
+            "projected_u_px", "projected_v_px", "detected_u_px",
+            "detected_v_px", "reprojection_error_px", "corner_status",
+        ],
+    )
+    write_csv(
+        args.output_dir / "corner_metrics.csv",
+        corner["per_distance"],
+        [
+            "dataset", "distance_ft", "attempted_validation_frames",
+            "frames_with_independent_11x17_rgb_detection",
+            "known_physical_inner_corners_attempted_per_frame",
+            "independently_evaluated_corners", "mean_reprojection_error_px",
+            "median_reprojection_error_px", "rmse_reprojection_error_px",
+            "standard_deviation_reprojection_error_px",
+            "maximum_reprojection_error_px", "percentage_within_1_px",
+            "percentage_within_2_px", "percentage_within_3_px",
+            "passes_project_99pct_within_2px", "interpretation",
+        ],
+    )
+    corner_detection_rows = []
+    for distance in corner["per_distance"]:
+        for frame in distance["per_frame"]:
+            detection = frame["rgb_detection"]
+            metrics = frame["metrics"] or {}
+            corner_detection_rows.append({
+                "dataset": distance["dataset"],
+                "distance_ft": distance["distance_ft"],
+                "evaluation_frame_index": frame["evaluation_frame_index"],
+                "lidar_frame_index": frame["lidar_frame_index"],
+                "rgb_frame_index": frame["rgb_frame_index"],
+                "rgb_corners_detected": detection["detected"],
+                "square_pitch_x_px": detection["estimated_square_pitch_xy_px"][0],
+                "square_pitch_y_px": detection["estimated_square_pitch_xy_px"][1],
+                "evaluated_corners": metrics.get("evaluated_lidar_points", 0),
+                "rmse_reprojection_error_px": metrics.get("rmse_reprojection_error_px"),
+                "failure_reason": detection.get("failure_reason"),
+            })
+    write_csv(
+        args.output_dir / "corner_detection_status.csv",
+        corner_detection_rows,
+        [
+            "dataset", "distance_ft", "evaluation_frame_index",
+            "lidar_frame_index", "rgb_frame_index", "rgb_corners_detected",
+            "square_pitch_x_px", "square_pitch_y_px", "evaluated_corners",
+            "rmse_reprojection_error_px", "failure_reason",
         ],
     )
     diagnostic_rows = []
@@ -961,6 +1378,18 @@ def main():
             "qualitative_examples": internal["qualitative_examples"],
             "error_vector_figures": internal["error_vector_figures"],
         },
+        "independent_checkerboard_corner_validation": {
+            "method": internal["corner_validation"]["method"],
+            "per_distance": internal["corner_validation"]["per_distance"],
+            "figures": internal["corner_validation"]["figures"],
+            "individual_corner_output": str(
+                args.output_dir / "corner_individual_errors.csv"
+            ),
+            "detection_status_output": str(
+                args.output_dir / "corner_detection_status.csv"
+            ),
+        },
+        "calibration_optimization_documentation": frozen["optimization_documentation"],
         "external_acsc": public_result,
         "experiments_are_separate": True,
         "combined_overall_accuracy_reported": False,

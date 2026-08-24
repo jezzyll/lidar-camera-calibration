@@ -28,6 +28,9 @@ claim. The transform is not refitted after validation to force the target.
 - all 30 LiDAR/RGB timestamp pairs and per-distance summary statistics;
 - all 30 frame-level error rows, including standard deviation;
 - three representative reprojection-error vector plots;
+- a 5,610-row independent physical-corner attempt audit and three corner
+  observability figures;
+- complete optimization mathematics and actual convergence counters;
 - `RᵀR`, determinant, and rotation-validity evidence;
 - documented checks for synchronization, frame convention, translation,
   intrinsics/distortion/resolution, target dimensions, plane fit,
@@ -91,12 +94,19 @@ Numeric and audit evidence:
 - `outputs/phase1_final/internal_multiframe_metrics.csv` — aggregate result;
 - `outputs/phase1_final/timestamp_pairs.csv` and `timestamp_summary.csv`;
 - `outputs/phase1_final/diagnostic_summary.csv`;
+- `outputs/phase1_final/corner_metrics.csv` — aggregate independent-corner
+  result;
+- `outputs/phase1_final/corner_detection_status.csv` — all 30 detection
+  attempts;
+- `outputs/phase1_final/corner_individual_errors.csv` — 30×187 attempted
+  physical corners;
 - `outputs/phase1_final/data_provenance.json`;
 - `outputs/phase1_final/required_new_capture_protocol.md`.
 
 Image evidence:
 
 - `outputs/phase1_final/error_vectors/` — three vector plots;
+- `outputs/phase1_final/corner_validation/` — three corner-observability plots;
 - `outputs/phase1_final/qualitative/` — six internal original-RGB/mask/
   projection sets;
 - `outputs/phase1_final/public_external/qualitative/` — three public sets.
@@ -104,7 +114,7 @@ Image evidence:
 Shareable deliverables:
 
 - `deliverables/Phase1_Final_Corrections_Evidence_Report.docx` — formal report
-  with 16 tables and 12 measured-output figures embedded;
+  with 20 tables and 15 measured-output figures embedded;
 - `deliverables/Phase1_Final_Corrections_Evidence_Package.zip` — report,
   complete derived outputs, documentation, and reproducible code.
 
