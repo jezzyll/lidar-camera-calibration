@@ -1,131 +1,91 @@
-# Mentor handoff: Phase 1 calibration validation
+# Mentor handoff: Phase 1 final corrections
 
 ## Decision
 
-Phase 1 is **not yet accepted** under the project/mentor-defined requirement:
+Phase 1 is **OPEN**. The final implementation now contains a disjoint
+calibration/validation frame split, explicit RGB/LiDAR timestamp evidence, all
+30 frame-level metric rows, standard deviation, three error-vector plots,
+rotation-matrix validation, systematic-error diagnostics, original-grid
+qualitative outputs, and a reproducible evidence package.
 
-> At every internal distance, at least 99% of independently selected valid
-> LiDAR returns must have Euclidean reprojection error ≤ 2 pixels.
+The current transform still fails the project-defined acceptance requirement
+at 14.5 ft and 22.2 ft. A new controlled capture and larger target at 22–30 ft
+also require physical data acquisition and are not falsely marked complete.
 
-This is a project acceptance criterion. It is not claimed to be a universal
-threshold taken from a paper or standard.
+## Internal strict-split result
 
-## Internal multi-frame result
+| Distance | Frames | Points | Mean px | Median px | RMSE px | Std px | Max px | ≤1 px | ≤2 px | ≤3 px | Result |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|:---:|
+| 7.25 ft | 10 | 1,777 | 0.217 | 0.206 | 0.237 | 0.095 | 0.572 | 100.00% | 100.00% | 100.00% | pass |
+| 14.5 ft | 10 | 349 | 3.945 | 3.869 | 4.009 | 0.717 | 5.397 | 0.00% | 0.00% | 3.44% | fail |
+| 22.2 ft | 10 | 170 | 2.026 | 2.090 | 2.111 | 0.590 | 3.068 | 2.35% | 45.88% | 98.24% | fail |
 
-| Distance | Frames | Evaluated returns | Mean px | RMSE px | Median px | ≤1 px | ≤2 px | ≤3 px | Max px | Result |
-|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|:---:|
-| 7.25 ft | 10 | 1,786 | 0.217 | 0.237 | 0.205 | 100.00% | 100.00% | 100.00% | 0.752 | pass |
-| 14.5 ft | 10 | 345 | 3.928 | 3.991 | 3.846 | 0.00% | 0.00% | 4.06% | 5.365 | fail |
-| 22.2 ft | 10 | 176 | 2.113 | 2.192 | 2.154 | 2.27% | 43.18% | 97.16% | 3.064 | fail |
+Correct reporting statement: 100.00% of 1,777 independently evaluated returns
+at 7.25 ft have error at or below 2 px. This is not called 100% calibration
+accuracy.
 
-No "100% calibration accuracy" claim is made. The percentages above are the
-fractions of evaluated returns satisfying specific Euclidean pixel-error
-thresholds.
+## Anti-circularity and split
 
-## Independent point selection
+- `frame_index % 4 == 0`: calibration LiDAR frames;
+- ten evenly spaced `frame_index % 4 == 2` frames: validation;
+- remainders 1 and 3: unused;
+- validation frames never refine `R` or `t`;
+- validation returns are selected by LiDAR-only ROI, plane residual, known
+  physical extent, and boundary margin;
+- RGB masks are separate visualization files and never participate in point
+  selection or metric calculation.
 
-The internal evaluation set is selected before any RGB reference is consulted:
+The explicit lists are in
+`outputs/phase1_final/calibration_validation_split.json`.
 
-1. read a single raw Livox frame;
-2. apply the predeclared metric LiDAR ROI;
-3. fit `x = a*y + b*z + c` robustly using LiDAR coordinates;
-4. keep returns with absolute plane residual ≤ 0.015 m;
-5. keep returns inside the known 0.30×0.45 m board with a 0.00375 m
-   boundary margin;
-6. freeze those returns;
-7. only then use the camera checkerboard geometry to obtain reference pixels.
+## Main diagnostic conclusion
 
-The RGB mask is saved only as a separate visualization/annotation file. It is
-never used to select, reject, or score a LiDAR return.
+The 14.5 ft and 22.2 ft errors are systematic. Error-vector directional
+consistency is 0.990 at each failing distance. Intrinsics/distortion are
+identical across bags, `R` is a valid proper rotation (`det(R)` approximately
+1 and Frobenius orthogonality error `5.690e-16`), plane fits are millimetric,
+and timestamp-error correlations do not support synchronization as the primary
+cause.
 
-## Mathematical definition
+The remaining evidence points to extrinsic/reference geometry inconsistency.
+The small middle/far targets use manual original-grid boundaries, so improved
+independent target observations are required before attributing all error to
+`R` or `t` alone.
 
-For the calibrated projection \((u_i,v_i)\) and independent checkerboard
-reference \((u_i^*,v_i^*)\) for the same physical point:
+## Public external result
 
-```text
-e_i = sqrt((u_i-u_i*)^2 + (v_i-v_i*)^2)
-```
-
-- strict raster match: `round(u_i)=round(u_i*)` and
-  `round(v_i)=round(v_i*)`;
-- continuous exact match: `e_i ≤ 1e-9 px`;
-- acceptance match: `e_i ≤ 2 px`.
-
-Mean, median, RMSE, maximum, and the percentages at 1, 2, and 3 pixels are all
-reported. The JSON also includes strict-raster and continuous-exact rates.
-
-## Public external experiment
-
-The non-synthetic external baseline is the [ACSC real camera–LiDAR
-checkerboard dataset](https://github.com/HViktorTsoi/ACSC), with the
+The public experiment uses the real
+[ACSC dataset](https://github.com/HViktorTsoi/ACSC) and its
 [official sample download](https://drive.google.com/file/d/1hgV-aH_RSsL1geHDSIlwwvqrMy6ED56K/view).
-Fourteen frames are used for the public extrinsic fit and seven distinct frames
-are held out.
+The held-out result is 25.01% of 59,764 returns within 2 px: fail. Public and
+internal results are separate and are never pooled.
 
-The held-out public aggregate is 59,764 evaluated returns, 16.387 px mean,
-10.367 px median, 24.214 px RMSE, 53.526 px maximum, 11.82% within 1 px,
-25.01% within 2 px, and 30.70% within 3 px: **fail**. This failure is kept in
-the report. The current simple LiDAR grid-corner extractor is not reliable
-enough across all ACSC poses and must be improved before this can be claimed as
-a successful external baseline.
+## Files to share
 
-Public and internal experiments are never combined into one percentage.
+Send these two files together:
 
-## Calibration parameters
+1. `deliverables/Phase1_Final_Corrections_Evidence_Report.docx` — the full
+   technical report with all required tables and 12 measured-output figures
+   embedded.
+2. `deliverables/Phase1_Final_Corrections_Evidence_Package.zip` — the report,
+   derived dataset outputs, 30-frame CSV, timestamps, calibration files,
+   diagnostic/vector evidence, original RGB copies, masks, projections,
+   provenance, documentation, and reproducible code.
 
-```text
-K = [[386.76702881,   0.00000000, 322.92172241],
-     [  0.00000000, 386.23919678, 240.03582764],
-     [  0.00000000,   0.00000000,   1.00000000]]
+Raw internal ROS 2 bags and the large public archive are not duplicated in the
+ZIP. Their paths and official links are recorded in
+`outputs/phase1_final/data_provenance.json`.
 
-D = [-0.05702033, 0.06783563, -0.00031395, 0.00094203, -0.02286913]
-resolution = 640 x 480
+## Remaining physical work
 
-R_camera_lidar =
-[[-0.03659380, -0.99855630,  0.03932181],
- [-0.26905772, -0.02805037, -0.96271549],
- [ 0.96242861, -0.04580926, -0.26764282]]
+- record new fixed-sensor, rigid-board, no-motion calibration and validation
+  sessions at all three distances;
+- keep the calibration and validation sessions separate before fitting;
+- capture a sharp rigid checkerboard of approximately 0.60×0.90 m or larger at
+  22–30 ft;
+- freeze the transform and rerun the same evaluator without validation refit;
+- accept Phase 1 only if every distance independently reaches at least 99%
+  within 2 px.
 
-t_camera_lidar_m = [0.12405766, -0.13617702, 0.19254424]
-
-T_camera_lidar =
-[[-0.03659380, -0.99855630,  0.03932181,  0.12405766],
- [-0.26905772, -0.02805037, -0.96271549, -0.13617702],
- [ 0.96242861, -0.04580926, -0.26764282,  0.19254424],
- [ 0.00000000,  0.00000000,  0.00000000,  1.00000000]]
-```
-
-Convention: `p_camera_color_optical = R_camera_lidar * p_livox +
-t_camera_lidar`; camera optical axes are +X right, +Y down, +Z forward; metres;
-pixel origin at top-left, u right and v down.
-
-## Evidence to show
-
-Primary report and tables:
-
-- `PHASE1_VALIDATION.md`;
-- `outputs/phase1_validation/phase1_validation_report.json`;
-- `outputs/phase1_validation/internal_multiframe_metrics.csv`;
-- `outputs/phase1_validation/internal_calibration_parameters.yaml`.
-
-Nine qualitative projection figures are in
-`outputs/phase1_validation/qualitative/`: three public examples and two
-synchronized examples at each internal distance. Every example includes:
-
-- an original-resolution, losslessly stored RGB image;
-- a separate mask that is not used for scoring;
-- the checkerboard reference, measured projected LiDAR returns, point-wise
-  reference markers/error lines, and an error color scale.
-
-## Reproduce
-
-```bash
-.venv/bin/python scripts/calibrate.py
-.venv/bin/python scripts/phase1_required_validation.py
-```
-
-The full raw-data directory layout and public download instructions are in
-`README.md`. The JSON is the canonical record; it contains train/test indices,
-all per-frame metrics and timestamps, RGB pixel hashes, LiDAR selection audits,
-full transforms, integrity declarations, and limitations.
+Full definitions, parameters, evidence, and commands are in
+`PHASE1_FINAL_CORRECTIONS.md`.

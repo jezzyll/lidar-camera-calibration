@@ -94,6 +94,7 @@ def error_metrics(actual: np.ndarray, expected: np.ndarray) -> tuple[dict, np.nd
         "mean_reprojection_error_px": float(np.mean(errors)),
         "median_reprojection_error_px": float(np.median(errors)),
         "rmse_reprojection_error_px": float(np.sqrt(np.mean(errors ** 2))),
+        "standard_deviation_reprojection_error_px": float(np.std(errors)),
         "maximum_reprojection_error_px": float(np.max(errors)),
         "percentage_within_1_px": float(100.0 * np.mean(errors <= 1.0)),
         "percentage_within_2_px": float(100.0 * np.mean(errors <= 2.0)),
@@ -518,7 +519,8 @@ def write_internal_csv(path: Path, rows: list[dict]):
     fields = [
         "dataset", "distance_ft", "number_of_frames", "evaluated_lidar_points",
         "mean_reprojection_error_px", "rmse_reprojection_error_px",
-        "median_reprojection_error_px", "percentage_within_1_px",
+        "median_reprojection_error_px", "standard_deviation_reprojection_error_px",
+        "percentage_within_1_px",
         "percentage_within_2_px", "percentage_within_3_px",
         "maximum_reprojection_error_px", "strict_same_raster_pixel_percentage",
         "passes_project_99pct_within_2px",
