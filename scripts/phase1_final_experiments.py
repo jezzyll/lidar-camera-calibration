@@ -188,7 +188,15 @@ def calibrate_from_split(data_root: Path) -> tuple[dict, dict, dict, dict]:
             "calibration_lidar_indices": calibration_indices,
             "validation_lidar_rule": "10 evenly spaced frames from frame_index % 4 == 2",
             "validation_lidar_indices": validation_indices,
-            "unused_lidar_rule": "frame_index % 4 in {1,3}",
+            "unused_lidar_rule": (
+                "all frame indices not selected for calibration or validation; "
+                "includes frame_index % 4 in {1,3} and unselected % 4 == 2 candidates"
+            ),
+            "unused_lidar_indices": sorted(
+                set(range(len(frames)))
+                - set(calibration_indices)
+                - set(validation_indices)
+            ),
             "calibration_rgb_frame_index": 0,
             "calibration_rgb_timestamp_ns": rgb_timestamp,
         }
@@ -671,6 +679,7 @@ def evaluate_internal_split(args, frozen: dict, split: dict, frame_cache: dict,
     timestamp_rows = []
     frame_rows = []
     corner_rows = []
+    return_rows = []
     corner_per_distance = []
     corner_figures = []
 
@@ -702,6 +711,7 @@ def evaluate_internal_split(args, frozen: dict, split: dict, frame_cache: dict,
             actual = actual[valid]
             expected = expected[valid]
             depth = depth[valid]
+            selected = selected[valid]
             metrics, errors = error_metrics(actual, expected)
             vectors = vector_metrics(actual, expected)
             signed_delta_ms = (rgb["timestamp_ns"] - frame["timestamp_ns"]) / 1e6
@@ -725,6 +735,29 @@ def evaluate_internal_split(args, frozen: dict, split: dict, frame_cache: dict,
                 "camera_polygon": polygon,
             }
             frame_records.append(record)
+            for return_index, (point, projected, reference, error) in enumerate(
+                zip(selected, actual, expected, errors)
+            ):
+                return_rows.append({
+                    "dataset": name,
+                    "distance_ft": spec["distance_ft"],
+                    "evaluation_frame_index": evaluation_index,
+                    "lidar_frame_index": frame["index"],
+                    "rgb_frame_index": rgb["frame_index"],
+                    "return_index_within_frame": return_index,
+                    "lidar_x_m": point[0],
+                    "lidar_y_m": point[1],
+                    "lidar_z_m": point[2],
+                    "lidar_intensity": point[3],
+                    "projected_u_px": projected[0],
+                    "projected_v_px": projected[1],
+                    "reference_u_px": reference[0],
+                    "reference_v_px": reference[1],
+                    "reprojection_error_px": error,
+                    "within_1_px": bool(error <= 1.0),
+                    "within_2_px": bool(error <= 2.0),
+                    "within_3_px": bool(error <= 3.0),
+                })
 
             inner_lidar = checkerboard_inner_corners_3d(
                 np.asarray(lidar_audit["plane_coefficient"], dtype=np.float64),
@@ -950,6 +983,12 @@ def evaluate_internal_split(args, frozen: dict, split: dict, frame_cache: dict,
             "distance_ft": spec["distance_ft"],
             "attempted_validation_frames": len(corner_frame_records),
             "frames_with_raw_11x17_rgb_detector_result": len(raw_detected_corner_frames),
+            "frames_rejected_by_rgb_geometry": (
+                len(raw_detected_corner_frames) - len(detected_corner_frames)
+            ),
+            "frames_without_raw_11x17_grid": (
+                len(corner_frame_records) - len(raw_detected_corner_frames)
+            ),
             "frames_with_independent_11x17_rgb_detection": len(detected_corner_frames),
             "known_physical_inner_corners_attempted_per_frame": (
                 CHECKERBOARD_INNER_COLUMNS * CHECKERBOARD_INNER_ROWS
@@ -989,6 +1028,7 @@ def evaluate_internal_split(args, frozen: dict, split: dict, frame_cache: dict,
         "error_vector_figures": vector_figures,
         "timestamp_rows": timestamp_rows,
         "frame_rows": frame_rows,
+        "return_rows": return_rows,
         "corner_validation": {
             "method": {
                 "physical_corners": (
@@ -1180,15 +1220,16 @@ def diagnostic_results(frozen: dict, internal: dict, context: dict) -> dict:
             "required_capture_protocol": [
                 "rigidly lock the D455 and Livox mount and record the physical sensor baseline",
                 "rigidly mount a flat checkerboard; prevent target/sensor movement and people crossing the view",
-                "record separate calibration and validation sessions at 7.25, 14.5, and 22.2 ft",
+                "record completely separate calibration and validation sessions at approximately 7.25, 14.5, 22, 25, and 30 ft",
                 "use hardware synchronization when available; otherwise record both native timestamps",
-                "use multiple board positions and tilts for calibration and distinct held-out poses for validation",
+                "use multiple board positions and orientations/tilts at every distance for calibration and distinct held-out poses for validation",
+                "use a sharp rigid larger checkerboard suitable for the 22--30 ft observations while preserving known square dimensions",
                 "freeze R and t before any validation bag is opened, then run this evaluator without refitting",
             ],
             "missing_evidence": [
                 "separate calibration and validation capture sessions",
                 "documented no-person/no-target-motion acquisition protocol",
-                "new rigid-board capture at all three distances",
+                "new rigid-board capture at approximately 7.25, 14.5, 22, 25, and 30 ft",
             ],
             "conclusion": "OPEN — requires physical data acquisition; existing static-frame analysis cannot be relabeled as a new controlled experiment.",
         },
@@ -1232,6 +1273,7 @@ def write_outputs(args, report: dict, frozen: dict, internal: dict):
         "evaluated_lidar_points", "mean_reprojection_error_px",
         "median_reprojection_error_px", "rmse_reprojection_error_px",
         "standard_deviation_reprojection_error_px", "maximum_reprojection_error_px",
+        "count_within_1_px", "count_within_2_px", "count_within_3_px",
         "percentage_within_1_px", "percentage_within_2_px", "percentage_within_3_px",
         "strict_same_raster_pixel_percentage", "passes_project_99pct_within_2px",
     ]
@@ -1246,11 +1288,24 @@ def write_outputs(args, report: dict, frozen: dict, internal: dict):
         "dataset", "distance_ft", "number_of_frames", "evaluated_lidar_points",
         "mean_reprojection_error_px", "median_reprojection_error_px",
         "rmse_reprojection_error_px", "standard_deviation_reprojection_error_px",
-        "maximum_reprojection_error_px", "percentage_within_1_px",
+        "maximum_reprojection_error_px", "count_within_1_px",
+        "count_within_2_px", "count_within_3_px", "percentage_within_1_px",
         "percentage_within_2_px", "percentage_within_3_px",
         "strict_same_raster_pixel_percentage", "passes_project_99pct_within_2px",
     ]
     write_csv(args.output_dir / "internal_multiframe_metrics.csv", internal["per_distance"], aggregate_fields)
+    write_csv(
+        args.output_dir / "return_individual_errors.csv",
+        internal["return_rows"],
+        [
+            "dataset", "distance_ft", "evaluation_frame_index",
+            "lidar_frame_index", "rgb_frame_index", "return_index_within_frame",
+            "lidar_x_m", "lidar_y_m", "lidar_z_m", "lidar_intensity",
+            "projected_u_px", "projected_v_px", "reference_u_px",
+            "reference_v_px", "reprojection_error_px", "within_1_px",
+            "within_2_px", "within_3_px",
+        ],
+    )
     timestamp_summary = []
     for item in internal["per_distance"]:
         timestamp_summary.append({
@@ -1285,6 +1340,7 @@ def write_outputs(args, report: dict, frozen: dict, internal: dict):
         [
             "dataset", "distance_ft", "attempted_validation_frames",
             "frames_with_raw_11x17_rgb_detector_result",
+            "frames_rejected_by_rgb_geometry", "frames_without_raw_11x17_grid",
             "frames_with_independent_11x17_rgb_detection",
             "known_physical_inner_corners_attempted_per_frame",
             "independently_evaluated_corners", "mean_reprojection_error_px",

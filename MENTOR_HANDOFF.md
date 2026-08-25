@@ -24,22 +24,30 @@ also require physical data acquisition and are not falsely marked complete.
 | 14.5 ft | 10 | 349 | 3.945 | 3.869 | 4.009 | 0.717 | 5.397 | 0.00% | 0.00% | 3.44% | fail |
 | 22.2 ft | 10 | 170 | 2.026 | 2.090 | 2.111 | 0.590 | 3.068 | 2.35% | 45.88% | 98.24% | fail |
 
+The exact ≤2 px numerators are 1,777/1,777, 0/349, and 78/170. Thus the
+current frozen 22.2-ft run evaluates to 45.8823529%. The 43.18% quoted in the
+review message is not reproducible from these 170 return rows; it is not used
+to replace the generated result. The acceptance decision remains fail.
+
 Correct reporting statement: 100.00% of 1,777 independently evaluated returns
 at 7.25 ft have error at or below 2 px. This is not called 100% calibration
 accuracy.
 
 ## Anti-circularity and split
 
-- `frame_index % 4 == 0`: calibration LiDAR frames;
-- ten evenly spaced `frame_index % 4 == 2` frames: validation;
-- remainders 1 and 3: unused;
+- calibration set C: every `frame_index % 4 == 0` frame;
+- validation set V: ten explicitly listed, evenly spaced
+  `frame_index % 4 == 2` frames;
+- unused set U: every other frame, including remainders 1 and 3 and unselected
+  remainder-2 candidates;
 - validation frames never refine `R` or `t`;
 - validation returns are selected by LiDAR-only ROI, plane residual, known
   physical extent, and boundary margin;
 - RGB masks are separate visualization files and never participate in point
   selection or metric calculation.
 
-The explicit lists are in
+The report gives C and U as exact set expressions/counts and lists every V
+index. The complete integer arrays for C, V, and U are in
 `outputs/phase1_final/calibration_validation_split.json`.
 
 ## Main diagnostic conclusion
@@ -58,11 +66,11 @@ independent target observations are required before attributing all error to
 
 ## Independent corner result
 
-| Distance | Attempted / raw / accepted | Evaluated corners | Mean px | Median px | RMSE px | Std px | Max px | ≤2 px |
-|---:|:---:|---:|---:|---:|---:|---:|---:|---:|
-| 7.25 ft | 10 / 3 / 2 | 374 | 0.300 | 0.249 | 0.356 | 0.192 | 0.857 | 100.00% |
-| 14.5 ft | 10 / 0 / 0 | 0 | N/A | N/A | N/A | N/A | N/A | N/A |
-| 22.2 ft | 10 / 0 / 0 | 0 | N/A | N/A | N/A | N/A | N/A | N/A |
+| Distance | RGB frames | Rejected grids | Valid grids | Valid corners | Mean px | RMSE px | Max px | ≤1 px | ≤2 px | ≤3 px |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 7.25 ft | 10 | 1 | 2 | 374 | 0.300279 | 0.356403 | 0.856734 | 100.00% | 100.00% | 100.00% |
+| 14.5 ft | 10 | 0 | 0 | 0 | N/A | N/A | N/A | N/A | N/A | N/A |
+| 22.2 ft | 10 | 0 | 0 | 0 | N/A | N/A | N/A | N/A | N/A | N/A |
 
 The original 98.04% value was not a transform failure. All 11 apparent
 failures were in the final row returned for RGB frame 987. That final row was
@@ -110,9 +118,10 @@ Send these two files together:
    technical report with all required tables and 15 measured-output figures
    embedded.
 2. `deliverables/Phase1_Final_Corrections_Evidence_Package.zip` — the report,
-   derived dataset outputs, 30-frame CSV, timestamps, calibration files,
-   diagnostic/vector evidence, original RGB copies, masks, projections,
-   provenance, documentation, and reproducible code.
+   derived dataset outputs, 30-frame CSV, all 2,296 evaluated return rows,
+   timestamps, calibration files, diagnostic/vector evidence, original RGB
+   copies, masks, projections, provenance, documentation, and reproducible
+   code.
 
 Raw internal ROS 2 bags and the large public archive are not duplicated in the
 ZIP. Their paths and official links are recorded in
@@ -121,10 +130,10 @@ ZIP. Their paths and official links are recorded in
 ## Remaining physical work
 
 - record new fixed-sensor, rigid-board, no-motion calibration and validation
-  sessions at all three distances;
+  sessions at approximately 7.25, 14.5, 22, 25, and 30 ft;
 - keep the calibration and validation sessions separate before fitting;
 - capture a sharp rigid checkerboard of approximately 0.60×0.90 m or larger at
-  22–30 ft;
+  22, 25, and 30 ft, using multiple positions and orientations;
 - freeze the transform and rerun the same evaluator without validation refit;
 - accept Phase 1 only if every distance independently reaches at least 99%
   within 2 px.

@@ -22,17 +22,23 @@ The final experiment freezes the transform before scoring validation frames:
 - calibration LiDAR frames: `frame_index % 4 == 0`;
 - validation LiDAR frames: ten evenly spaced frames from
   `frame_index % 4 == 2`;
-- unused LiDAR frames: `frame_index % 4 in {1,3}`;
+- unused LiDAR frames: every index not selected for calibration or validation,
+  including all `frame_index % 4 in {1,3}` frames and the unselected
+  `frame_index % 4 == 2` candidates;
 - calibration RGB observation: RGB frame 0 from each internal bag;
 - validation RGB observation: nearest timestamp to each validation LiDAR
   frame;
 - validation frames never refine `R` or `t`.
 
-| Distance | Total LiDAR frames | Calibration frames | Validation LiDAR indices |
-|---:|---:|---:|:---|
-| 7.25 ft | 991 | 248 | 2, 110, 218, 330, 438, 550, 658, 770, 878, 990 |
-| 14.5 ft | 884 | 221 | 2, 98, 194, 294, 390, 490, 586, 686, 782, 882 |
-| 22.2 ft | 1,091 | 273 | 2, 122, 242, 362, 482, 606, 726, 846, 966, 1,090 |
+| Distance | Calibration set C | Validation set V | Unused set U | `R,t` frozen before V |
+|---:|:---|:---|:---|:---:|
+| 7.25 ft | `{0,4,…,988}` (248) | `{2,110,218,330,438,550,658,770,878,990}` | `{0,…,990} \ (C∪V)` (733) | yes |
+| 14.5 ft | `{0,4,…,880}` (221) | `{2,98,194,294,390,490,586,686,782,882}` | `{0,…,883} \ (C∪V)` (653) | yes |
+| 22.2 ft | `{0,4,…,1,088}` (273) | `{2,122,242,362,482,606,726,846,966,1,090}` | `{0,…,1,090} \ (C∪V)` (808) | yes |
+
+The exact integer arrays for C, V, and U—not only these compact set
+descriptions—are stored in
+`outputs/phase1_final/calibration_validation_split.json`.
 
 This is a genuinely disjoint frame-level split within one supplied capture
 session per distance. It is not a substitute for the requested new, separate
@@ -83,6 +89,12 @@ The practical decision uses the 2 px percentage only.
 These are threshold-satisfaction percentages for independently evaluated
 returns. They are not described as percentage calibration accuracy.
 
+Exact ≤2 px counts are 1,777/1,777 at 7.25 ft, 0/349 at 14.5 ft, and
+78/170 at 22.2 ft. Therefore the reproducible current 22.2-ft value is
+`78/170 × 100 = 45.8823529%`. A separately quoted 43.18% is not produced by
+the current frozen run and is not substituted for the generated value. The
+status is fail under either value.
+
 All 30 frame rows are in
 `outputs/phase1_final/frame_level_error_metrics.csv` and are embedded in the
 Word report.
@@ -105,6 +117,18 @@ The frozen transform is also tested with known physical checkerboard corners:
    perspective but rejects duplicated or skipped physical rows/columns.
 6. Report error only where the complete 11×17 RGB grid is independently
    resolved and passes that transform-blind gate.
+
+### Corrected 7.25-ft RGB corner-validation table
+
+| RGB frames | RGB-geometry-rejected 187-corner grids | Valid 187-corner grids | Valid corners | Mean px | RMSE px | Maximum px | ≤1 px | ≤2 px | ≤3 px |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 10 | 1 | 2 | 374 | 0.300279 | 0.356403 | 0.856734 | 100.00% | 100.00% | 100.00% |
+
+Three of the ten RGB frames produced raw 11×17 grids. One whole 187-corner
+grid was rejected by RGB neighbour-spacing geometry before any LiDAR
+reprojection error was evaluated, two grids were valid, and seven frames had
+no complete raw grid. No individual corner was rejected using its error, and
+`R`, `t`, `K`, and `D` were not changed.
 
 | Distance | Frames attempted | Raw grids | Accepted grids | Corners evaluated | Mean px | Median px | RMSE px | Std px | Max px | ≤1 px | ≤2 px | ≤3 px |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -297,11 +321,12 @@ A legitimate new experiment requires:
 1. rigidly lock the D455 and Livox mount and measure the physical baseline;
 2. rigidly mount a flat board and prevent sensor/target movement and people
    crossing the view;
-3. record separate calibration and validation sessions at all three distances;
+3. record completely separate calibration and validation sessions at
+   approximately 7.25, 14.5, 22, 25, and 30 ft;
 4. use hardware synchronization if available, otherwise preserve both native
    timestamps;
-5. use several board positions/tilts for calibration and different held-out
-   poses for validation;
+5. use several board positions and orientations/tilts at every distance for
+   calibration and different held-out poses for validation;
 6. freeze `R,t` before opening validation bags and run the validator without
    refitting.
 
@@ -309,7 +334,8 @@ A legitimate new experiment requires:
 
 After the diagnostics above, capture a rigid 0.60×0.90 m checkerboard or larger
 while keeping it fully visible. The print must be sharp/flat with known square
-dimensions. The same independent acceptance test applies.
+dimensions. Use it for the approximately 22, 25, and 30 ft observations. The
+same independent acceptance test applies.
 
 ## Separate public ACSC result
 
@@ -338,6 +364,7 @@ Primary outputs:
 - `outputs/phase1_final/frozen_calibration.json` and `.yaml`;
 - `outputs/phase1_final/calibration_validation_split.json`;
 - `outputs/phase1_final/frame_level_error_metrics.csv`;
+- `outputs/phase1_final/return_individual_errors.csv`;
 - `outputs/phase1_final/internal_multiframe_metrics.csv`;
 - `outputs/phase1_final/timestamp_pairs.csv` and `timestamp_summary.csv`;
 - `outputs/phase1_final/diagnostic_summary.csv`;

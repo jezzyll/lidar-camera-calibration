@@ -18,6 +18,9 @@ returns must have Euclidean reprojection error at or below 2 pixels.
 
 These are threshold-satisfaction rates, not a percentage calibration-accuracy
 claim. The transform is not refitted after validation to force the target.
+The exact ≤2 px counts are 1,777/1,777, 0/349, and 78/170 respectively;
+therefore the generated 22.2-ft result is 45.8823529%. A separately quoted
+43.18% is not reproducible from the current frozen-run return rows.
 
 ## What the final correction adds
 
@@ -27,6 +30,8 @@ claim. The transform is not refitted after validation to force the target.
 - LiDAR-only validation-return selection without an RGB mask;
 - all 30 LiDAR/RGB timestamp pairs and per-distance summary statistics;
 - all 30 frame-level error rows, including standard deviation;
+- every evaluated internal return with projected/reference pixels, error, and
+  exact ≤1/2/3 px flags;
 - three representative reprojection-error vector plots;
 - a 5,610-row independent physical-corner attempt audit and three corner
   observability figures;
@@ -93,6 +98,8 @@ Numeric and audit evidence:
   transform parameters;
 - `outputs/phase1_final/calibration_validation_split.json` — explicit split;
 - `outputs/phase1_final/frame_level_error_metrics.csv` — 30 frame rows;
+- `outputs/phase1_final/return_individual_errors.csv` — every evaluated
+  internal return and exact threshold flags;
 - `outputs/phase1_final/internal_multiframe_metrics.csv` — aggregate result;
 - `outputs/phase1_final/timestamp_pairs.csv` and `timestamp_summary.csv`;
 - `outputs/phase1_final/diagnostic_summary.csv`;
@@ -116,7 +123,7 @@ Image evidence:
 Shareable deliverables:
 
 - `deliverables/Phase1_Final_Corrections_Evidence_Report.docx` — formal report
-  with 20 tables and 15 measured-output figures embedded;
+  with 21 tables and 15 measured-output figures embedded;
 - `deliverables/Phase1_Final_Corrections_Evidence_Package.zip` — report,
   complete derived outputs, documentation, and reproducible code.
 
@@ -130,7 +137,7 @@ The internal split is deterministic:
 ```text
 calibration: frame_index % 4 == 0
 validation:  10 evenly spaced frames where frame_index % 4 == 2
-unused:      frame_index % 4 in {1,3}
+unused:      every frame not selected above (including unselected % 4 == 2)
 ```
 
 For each validation frame, returns are selected only from LiDAR geometry: a

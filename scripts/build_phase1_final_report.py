@@ -213,12 +213,24 @@ def build_report(report_path: Path, output_path: Path):
         "returns, not a claim of percentage calibration accuracy. No transform or result was "
         "altered to force the 99% target.",
     )
+    count_summary = "; ".join(
+        f"{item['distance_ft']:g} ft: {item['count_within_2_px']:,}/"
+        f"{item['evaluated_lidar_points']:,}"
+        for item in report["internal_livox_d455"]["per_distance"]
+    )
+    add_body(
+        doc,
+        f"Exact <=2 px numerators/denominators are {count_summary}. The current frozen "
+        "22.2-ft result is therefore 78/170 = 45.8823529%. A separately quoted 43.18% "
+        "cannot be reproduced from this run's evaluated returns and is not substituted for "
+        "the generated value; both values are below the 99% acceptance threshold.",
+    )
 
     page_break(doc)
     add_heading(doc, "1. Requirement-by-requirement status", 1)
     compliance = [
         ["Calibration/validation split", "Complete", "Disjoint LiDAR frame indices; validation never refines R or t"],
-        ["Frame lists documented", "Complete", "Rule and explicit validation indices stored in split JSON"],
+        ["Frame lists documented", "Complete", "Calibration, validation, and unused rules/counts in report; exact arrays in split JSON"],
         ["Systematic-error diagnosis", "Complete", "Ten required checks documented with measured evidence"],
         ["Explicit timestamp per pair", "Complete", "30 LiDAR/RGB timestamps plus signed/absolute deltas"],
         ["Per-distance timestamp summary", "Complete", "Mean, median, minimum, and maximum absolute differences"],
@@ -306,26 +318,37 @@ def build_report(report_path: Path, output_path: Path):
     )
     split_rows = []
     for name, item in sorted(report["strict_split"]["datasets"].items(), key=lambda pair: pair[1]["distance_ft"]):
+        calibration = item["calibration_lidar_indices"]
+        calibration_text = (
+            f"{calibration[0]}, {calibration[1]}, ..., {calibration[-1]} "
+            f"({len(calibration)} frames; index mod 4 = 0)"
+        )
+        unused = item["unused_lidar_indices"]
+        unused_text = (
+            f"U={{0..{item['total_lidar_frames'] - 1}}} \\ (C union V); "
+            f"{len(unused)} frames; exact array in split JSON"
+        )
         split_rows.append([
             f"{item['distance_ft']:g} ft",
             item["total_lidar_frames"],
-            len(item["calibration_lidar_indices"]),
+            calibration_text,
             ", ".join(map(str, item["validation_lidar_indices"])),
-            item["calibration_rgb_frame_index"],
+            unused_text,
             "Yes",
         ])
     add_table(
         doc,
-        ["Distance", "Total", "Calibration frames", "Validation LiDAR indices", "Calibration RGB", "Disjoint"],
+        ["Distance", "Total", "Calibration set C", "Validation set V", "Unused set U", "R,t frozen"],
         split_rows,
-        [850, 700, 1200, 4850, 1100, 660],
-        body_size=7.8,
+        [650, 600, 1600, 3400, 2300, 810],
+        body_size=7.2,
     )
     add_body(
         doc,
-        "The complete calibration index arrays and the split contract are stored in "
-        "calibration_validation_split.json. The report also declares that post-validation "
-        "transform refitting was not performed.",
+        "Calibration uses RGB frame 0 at each distance. Validation pairs each listed LiDAR "
+        "frame with its nearest original RGB timestamp. The complete C, V, and U index arrays "
+        "and the split contract are stored in calibration_validation_split.json. R and t are "
+        "frozen after calibration and post-validation transform refitting is not performed.",
     )
 
     add_heading(doc, "4. Independent point selection and strict alignment", 1)
@@ -615,6 +638,37 @@ def build_report(report_path: Path, output_path: Path):
         item for item in corner_validation["per_distance"]
         if item["distance_ft"] == 7.25
     )
+    add_heading(doc, "9.1 Corrected 7.25-ft numerical result", 2)
+    add_table(
+        doc,
+        [
+            "RGB frames", "Rejected grids", "Valid grids", "Valid corners",
+            "Mean", "RMSE", "Max", "<=1", "<=2", "<=3", "Rejection basis",
+        ],
+        [[
+            near_corner["attempted_validation_frames"],
+            near_corner["frames_rejected_by_rgb_geometry"],
+            near_corner["frames_with_independent_11x17_rgb_detection"],
+            near_corner["independently_evaluated_corners"],
+            f"{near_corner['mean_reprojection_error_px']:.6f} px",
+            f"{near_corner['rmse_reprojection_error_px']:.6f} px",
+            f"{near_corner['maximum_reprojection_error_px']:.6f} px",
+            f"{near_corner['percentage_within_1_px']:.2f}%",
+            f"{near_corner['percentage_within_2_px']:.2f}%",
+            f"{near_corner['percentage_within_3_px']:.2f}%",
+            "RGB-only neighbour spacing before LiDAR error",
+        ]],
+        [650, 700, 700, 750, 700, 700, 700, 650, 650, 650, 2510],
+        body_size=6.8,
+    )
+    add_body(
+        doc,
+        "Ten RGB validation frames were attempted: three produced raw 11x17 detector grids, "
+        "one complete 187-corner raw grid was rejected by RGB geometry, two grids were valid, "
+        "and seven produced no complete raw grid. The rejection happened before any LiDAR "
+        "reprojection error was evaluated. No individual corner was screened by error, and "
+        "R, t, K, and D were unchanged.",
+    )
     add_callout(
         doc,
         "Corner result",
@@ -677,7 +731,7 @@ def build_report(report_path: Path, output_path: Path):
                     "11x17 grid not resolved"
                 ),
             ])
-    add_heading(doc, "9.1 Detection status for all 30 validation frames", 2)
+    add_heading(doc, "9.2 Detection status for all 30 validation frames", 2)
     add_table(
         doc,
         ["ft", "Eval", "RGB", "Raw / valid", "Square pitch px", "Corners", "RMSE", "Status"],
@@ -698,7 +752,7 @@ def build_report(report_path: Path, output_path: Path):
 
     for index, figure in enumerate(corner_validation["figures"], start=1):
         page_break(doc)
-        add_heading(doc, f"9.{index + 1} Corner observability — {figure['distance_ft']:g} ft", 2)
+        add_heading(doc, f"9.{index + 2} Corner observability — {figure['distance_ft']:g} ft", 2)
         add_figure(
             doc,
             Path(figure["output"]),
@@ -786,6 +840,7 @@ def build_report(report_path: Path, output_path: Path):
         "diagnostic_summary.csv - conclusion for every diagnostic category",
         "corner_metrics.csv and corner_detection_status.csv - corner aggregate and all-frame observability results",
         "corner_individual_errors.csv - every one of the 5,610 attempted physical corners",
+        "return_individual_errors.csv - every independently evaluated internal LiDAR return and exact threshold flags",
         "corner_validation/ - one independent corner-observability figure per distance",
         "data_provenance.json - real-data identity, paths, topics, and public source links",
         "error_vectors/ - one representative vector plot per internal distance",
@@ -805,9 +860,9 @@ def build_report(report_path: Path, output_path: Path):
     add_callout(
         doc,
         "Required reporting statement",
-        "7.25 ft: 100.00% of 1,777 evaluated returns are within 2 px (pass). "
-        "14.5 ft: 0.00% of 349 are within 2 px (fail). 22.2 ft: 45.88% of 170 "
-        "are within 2 px (fail). Phase 1 status: OPEN.",
+        "7.25 ft: 1,777/1,777 (100.00%) evaluated returns are within 2 px (pass). "
+        "14.5 ft: 0/349 (0.00%) are within 2 px (fail). 22.2 ft: 78/170 "
+        "(45.88%) are within 2 px (fail). Phase 1 status: OPEN.",
         fill=PALE_RED,
         color=RED,
     )

@@ -89,6 +89,9 @@ def planar_corner_reference(points_xyz: np.ndarray, lidar_corners: np.ndarray,
 def error_metrics(actual: np.ndarray, expected: np.ndarray) -> tuple[dict, np.ndarray]:
     errors = np.linalg.norm(actual - expected, axis=1)
     same_raster_pixel = np.all(np.rint(actual) == np.rint(expected), axis=1)
+    within_1 = errors <= 1.0
+    within_2 = errors <= 2.0
+    within_3 = errors <= 3.0
     metrics = {
         "evaluated_lidar_points": int(len(errors)),
         "mean_reprojection_error_px": float(np.mean(errors)),
@@ -96,12 +99,15 @@ def error_metrics(actual: np.ndarray, expected: np.ndarray) -> tuple[dict, np.nd
         "rmse_reprojection_error_px": float(np.sqrt(np.mean(errors ** 2))),
         "standard_deviation_reprojection_error_px": float(np.std(errors)),
         "maximum_reprojection_error_px": float(np.max(errors)),
-        "percentage_within_1_px": float(100.0 * np.mean(errors <= 1.0)),
-        "percentage_within_2_px": float(100.0 * np.mean(errors <= 2.0)),
-        "percentage_within_3_px": float(100.0 * np.mean(errors <= 3.0)),
+        "count_within_1_px": int(np.count_nonzero(within_1)),
+        "count_within_2_px": int(np.count_nonzero(within_2)),
+        "count_within_3_px": int(np.count_nonzero(within_3)),
+        "percentage_within_1_px": float(100.0 * np.mean(within_1)),
+        "percentage_within_2_px": float(100.0 * np.mean(within_2)),
+        "percentage_within_3_px": float(100.0 * np.mean(within_3)),
         "strict_same_raster_pixel_percentage": float(100.0 * np.mean(same_raster_pixel)),
         "continuous_zero_error_percentage": float(100.0 * np.mean(errors <= EXACT_EPSILON_PX)),
-        "passes_project_99pct_within_2px": bool(np.mean(errors <= 2.0) >= 0.99),
+        "passes_project_99pct_within_2px": bool(np.mean(within_2) >= 0.99),
     }
     return metrics, errors
 
