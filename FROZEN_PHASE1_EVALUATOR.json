@@ -136,6 +136,26 @@
     {
       "path": "outputs/phase1_final/corner_individual_errors.csv",
       "sha256": "5c17cd246798b5372a98df660d6e5f9636e35cb373f9e9550cf2f606f71b8149"
+    },
+    {
+      "path": "outputs/phase1_final/timestamp_pairs.csv",
+      "sha256": "cf40cb5a395c15d5af2346782d2c630975017b31649038f45ae6ce7f65cd11c4"
+    },
+    {
+      "path": "outputs/phase1_final/timestamp_summary.csv",
+      "sha256": "96a9f33447bcdb5a50e30029e8a642792bd990374d7200bae74cb5c540561425"
+    },
+    {
+      "path": "outputs/phase1_final/diagnostic_summary.csv",
+      "sha256": "915076b250d7a23d029cf0eab03ae8b9c217c5f1a4916a80526f2c4377176715"
+    },
+    {
+      "path": "outputs/phase1_final/data_provenance.json",
+      "sha256": "704539dcd7c12d27581ad72cde119096cee6983a5b42bacb7d7cc4d8eeaeab36"
+    },
+    {
+      "path": "outputs/phase1_final/required_new_capture_protocol.md",
+      "sha256": "220c03dda3ddef52c0521d31b7b7de372168c8c13872170388664a3b6c08ca86"
     }
   ],
   "authoritative_parameter_file": "outputs/phase1_final/frozen_calibration.json",
