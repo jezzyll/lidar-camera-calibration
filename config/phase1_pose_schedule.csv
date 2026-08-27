@@ -1,0 +1,17 @@
+split,pose_id,center_u_fraction,center_v_fraction,nominal_yaw_deg,nominal_pitch_deg,nominal_roll_deg,notes
+calibration,C01,0.50,0.50,0,0,0,centered fronto-parallel
+calibration,C02,0.38,0.50,12,0,0,left position positive yaw
+calibration,C03,0.62,0.50,-12,0,0,right position negative yaw
+calibration,C04,0.50,0.40,0,12,0,high position positive pitch
+calibration,C05,0.50,0.60,0,-12,0,low position negative pitch
+calibration,C06,0.50,0.50,18,8,5,combined positive tilt
+calibration,C07,0.50,0.50,-18,-8,-5,combined negative tilt
+calibration,C08,0.58,0.42,10,-12,5,off-center mixed tilt
+validation,V01,0.46,0.46,5,-5,2,distinct held-out pose
+validation,V02,0.54,0.46,-7,4,-2,distinct held-out pose
+validation,V03,0.42,0.58,14,-6,-4,distinct held-out pose
+validation,V04,0.58,0.58,-14,6,4,distinct held-out pose
+validation,V05,0.50,0.40,8,15,-5,distinct held-out pose
+validation,V06,0.50,0.60,-8,-15,5,distinct held-out pose
+validation,V07,0.40,0.50,17,10,3,distinct held-out pose
+validation,V08,0.60,0.50,-17,-10,-3,distinct held-out pose

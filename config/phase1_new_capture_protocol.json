@@ -1,0 +1,64 @@
+{
+  "schema_version": "phase1-physical-acquisition/v1.0",
+  "protocol_status": "FROZEN_BEFORE_CAPTURE",
+  "frozen_evaluator": {
+    "tag": "phase1-evaluator-v1.0.0",
+    "commit": "50eb04fb8ed732e4dd8cc01092658bdf8fa08295",
+    "freeze_manifest": "FROZEN_PHASE1_EVALUATOR.json"
+  },
+  "phase1_status": "OPEN — software/documentation complete; new physical acquisition and final independent calibration validation pending.",
+  "unresolved_issue": "systematic reprojection bias whose root cause cannot yet be uniquely separated into extrinsic calibration error versus point/reference correspondence uncertainty using the current middle/far observations.",
+  "nominal_distances_ft": [7.25, 14.5, 22.0, 25.0, 30.0],
+  "distance_tolerance_ft": 0.5,
+  "minimum_unique_pose_ids_per_distance": {
+    "calibration": 8,
+    "validation": 8
+  },
+  "minimum_takes_per_pose": 2,
+  "minimum_stable_duration_s_per_take": 15.0,
+  "required_topics": [
+    "/camera/camera/color/image_raw",
+    "/camera/camera/color/camera_info",
+    "/livox/lidar"
+  ],
+  "required_image_resolution_wh": [640, 480],
+  "session_rules": {
+    "calibration_and_validation_session_ids_disjoint": true,
+    "calibration_and_validation_raw_paths_disjoint": true,
+    "validation_used_for_fitting": false,
+    "transform_frozen_before_validation_release": true,
+    "validation_refit_allowed": false,
+    "rgb_mask_used_for_lidar_selection_or_scoring": false
+  },
+  "raw_first_gate": {
+    "submit_unmodified_raw_recordings_first": true,
+    "freeze_protocol_checksums_roles_and_split_before_processing": true,
+    "claimed_result_before_gate_allowed": false
+  },
+  "board_planning": {
+    "physical_square_columns": 12,
+    "physical_square_rows": 18,
+    "inner_corner_columns": 11,
+    "inner_corner_rows": 17,
+    "d455_fx_px": 386.76702880859375,
+    "far_range_ft": 30.0,
+    "preferred_minimum_native_square_pitch_px": 5.0,
+    "preferred_square_size_m": 0.13,
+    "preferred_board_width_m": 1.56,
+    "preferred_board_height_m": 2.34,
+    "fallback_square_size_m": 0.12,
+    "fallback_board_width_m": 1.44,
+    "fallback_board_height_m": 2.16,
+    "fallback_requires_preflight_complete_11x17_detection": true,
+    "preflight_bags_excluded_from_calibration_and_validation": true
+  },
+  "required_manifest_files": [
+    "manifests/rig_measurement.csv",
+    "manifests/board_inventory.csv",
+    "manifests/capture_sessions.csv",
+    "manifests/split_assignment.csv"
+  ],
+  "pose_schedule": "config/phase1_pose_schedule.csv",
+  "new_raw_root_must_not_equal": "data/raw",
+  "current_frozen_cli_limitation": "v1.0.0 is hard-coded for the present three same-session bags; after raw-data sign-off, a separately reviewed and versioned input adapter may be required without changing frozen scoring functions."
+}

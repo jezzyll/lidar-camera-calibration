@@ -73,15 +73,18 @@ processing. Fourteen frames estimate one transform; seven distinct frames
 
 ## Internal multi-frame result
 
+This page is retained for implementation background, but its former preliminary
+table is superseded by the frozen final evaluator. The accepted result is:
+
 | Distance | Frames | Evaluated LiDAR points | Mean px | Median px | RMSE px | Maximum px | ≤1 px | ≤2 px | ≤3 px | Strict raster | Result |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|:---:|
-| 7.25 ft | 10 | 1,786 | 0.217 | 0.205 | 0.237 | 0.752 | 100.00% | 100.00% | 100.00% | 75.42% | pass |
-| 14.5 ft | 10 | 345 | 3.928 | 3.846 | 3.991 | 5.365 | 0.00% | 0.00% | 4.06% | 0.00% | fail |
-| 22.2 ft | 10 | 176 | 2.113 | 2.154 | 2.192 | 3.064 | 2.27% | 43.18% | 97.16% | 1.14% | fail |
+| 7.25 ft | 10 | 1,777 | 0.217 | 0.206 | 0.237 | 0.572 | 100.00% | 100.00% | 100.00% | 75.91% | pass |
+| 14.5 ft | 10 | 349 | 3.945 | 3.869 | 4.009 | 5.397 | 0.00% | 0.00% | 3.44% | 0.00% | fail |
+| 22.2 ft | 10 | 170 | 2.026 | 2.090 | 2.111 | 3.068 | 2.35% | 45.88% | 98.24% | 0.59% | fail |
 
 Continuous exact match is 0.00% at all three distances, as expected for
 floating-point measurements. No result is described as "100% calibration
-accuracy." For example, the valid statement at 7.25 ft is: **100.00% of 1,786
+accuracy." For example, the valid statement at 7.25 ft is: **100.00% of 1,777
 evaluated returns have reprojection error ≤ 2 pixels.**
 
 ## Separate public held-out result

@@ -10,9 +10,22 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 REQUIRED_FILES = [
     Path("deliverables/Phase1_Final_Corrections_Evidence_Report.docx"),
+    Path("deliverables/Phase1_Frozen_Evaluator_Baseline.zip"),
+    Path("deliverables/Phase1_Physical_Acquisition_Kit.zip"),
     Path("PHASE1_FINAL_CORRECTIONS.md"),
     Path("MENTOR_HANDOFF.md"),
     Path("README.md"),
+    Path("PHASE1_VALIDATION.md"),
+    Path("PHASE1_PHYSICAL_ACQUISITION_PROTOCOL.md"),
+    Path("PHASE1_RAW_SUBMISSION_README_TEMPLATE.md"),
+    Path("FROZEN_PHASE1_EVALUATOR.json"),
+    Path("FROZEN_PHASE1_EVALUATOR.md"),
+    Path("config/phase1_new_capture_protocol.json"),
+    Path("config/phase1_pose_schedule.csv"),
+    Path("config/phase1_capture_sessions_template.csv"),
+    Path("config/phase1_rig_measurement_template.csv"),
+    Path("config/phase1_board_inventory_template.csv"),
+    Path("config/phase1_split_assignment_template.csv"),
     Path("requirements.txt"),
     Path("scripts/calibrate.py"),
     Path("scripts/phase1_required_validation.py"),
@@ -21,6 +34,10 @@ REQUIRED_FILES = [
     Path("scripts/build_phase1_report.py"),
     Path("scripts/build_phase1_final_report.py"),
     Path("scripts/package_phase1_final.py"),
+    Path("scripts/package_frozen_phase1_baseline.py"),
+    Path("scripts/package_phase1_acquisition_kit.py"),
+    Path("scripts/create_phase1_capture_scaffold.py"),
+    Path("scripts/validate_phase1_capture_submission.py"),
     Path("scripts/validate.py"),
 ]
 
@@ -55,7 +72,8 @@ def main():
             "PACKAGE_CONTENTS.txt",
             "Phase 1 final corrections evidence package\n\n"
             "Includes the Word report, all derived numeric/image outputs, data provenance, "
-            "split/timestamp evidence, error-vector figures, and reproducible code.\n\n"
+            "split/timestamp evidence, error-vector figures, frozen evaluator baseline, "
+            "physical-acquisition kit, and reproducible code.\n\n"
             "Raw internal ROS 2 bags and the large public archive are intentionally not "
             "duplicated. data_provenance.json records internal paths and the official public "
             "dataset/download links.\n",

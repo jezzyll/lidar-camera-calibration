@@ -8,6 +8,13 @@ calibration/validation frame split, explicit RGB/LiDAR timestamp evidence, all
 rotation-matrix validation, systematic-error diagnostics, original-grid
 qualitative outputs, and a reproducible evidence package.
 
+Current Phase 1 status: **OPEN — software/documentation complete; new physical
+acquisition and final independent calibration validation pending.**
+
+The accepted evaluator is frozen as `phase1-evaluator-v1.0.0` at commit
+`50eb04fb8ed732e4dd8cc01092658bdf8fa08295`; the protected hashes are in
+`FROZEN_PHASE1_EVALUATOR.json`.
+
 The final methodological addition is also implemented: independent projection
 of all 187 known physical inner corners per validation frame, camera-only RGB
 corner detection, per-corner output, and full optimization mathematics.
@@ -25,9 +32,8 @@ also require physical data acquisition and are not falsely marked complete.
 | 22.2 ft | 10 | 170 | 2.026 | 2.090 | 2.111 | 0.590 | 3.068 | 2.35% | 45.88% | 98.24% | fail |
 
 The exact ≤2 px numerators are 1,777/1,777, 0/349, and 78/170. Thus the
-current frozen 22.2-ft run evaluates to 45.8823529%. The 43.18% quoted in the
-review message is not reproducible from these 170 return rows; it is not used
-to replace the generated result. The acceptance decision remains fail.
+accepted frozen 22.2-ft run evaluates to `78/170 = 45.8823529%`. The
+acceptance decision remains fail.
 
 Correct reporting statement: 100.00% of 1,777 independently evaluated returns
 at 7.25 ft have error at or below 2 px. This is not called 100% calibration
@@ -59,10 +65,10 @@ identical across bags, `R` is a valid proper rotation (`det(R)` approximately
 and timestamp-error correlations do not support synchronization as the primary
 cause.
 
-The remaining evidence points to extrinsic/reference geometry inconsistency.
-The small middle/far targets use manual original-grid boundaries, so improved
-independent target observations are required before attributing all error to
-`R` or `t` alone.
+The unresolved issue is **systematic reprojection bias whose root cause cannot
+yet be uniquely separated into extrinsic calibration error versus
+point/reference correspondence uncertainty using the current middle/far
+observations.**
 
 ## Independent corner result
 
@@ -112,7 +118,7 @@ internal results are separate and are never pooled.
 
 ## Files to share
 
-Send these two files together:
+Send these files together:
 
 1. `deliverables/Phase1_Final_Corrections_Evidence_Report.docx` — the full
    technical report with all required tables and 15 measured-output figures
@@ -122,6 +128,10 @@ Send these two files together:
    timestamps, calibration files, diagnostic/vector evidence, original RGB
    copies, masks, projections, provenance, documentation, and reproducible
    code.
+3. `deliverables/Phase1_Frozen_Evaluator_Baseline.zip` — the immutable
+   evaluator source and accepted numerical evidence after SHA-256 verification.
+4. `deliverables/Phase1_Physical_Acquisition_Kit.zip` — the field protocol,
+   pose schedule, manifest templates, and raw-submission integrity validator.
 
 Raw internal ROS 2 bags and the large public archive are not duplicated in the
 ZIP. Their paths and official links are recorded in
@@ -129,14 +139,28 @@ ZIP. Their paths and official links are recorded in
 
 ## Remaining physical work
 
-- record new fixed-sensor, rigid-board, no-motion calibration and validation
-  sessions at approximately 7.25, 14.5, 22, 25, and 30 ft;
-- keep the calibration and validation sessions separate before fitting;
-- capture a sharp rigid checkerboard of approximately 0.60×0.90 m or larger at
-  22, 25, and 30 ft, using multiple positions and orientations;
+- rigidly mount the D455 and Mid-360, photograph witness marks, and measure the
+  physical baseline vector with at least three repeated measurements;
+- use a measured rigid, flat checkerboard; the recommended far-range planning
+  target is 130 mm squares on a 1.56×2.34 m 12×18 board, verified by a
+  disposable 30-ft preflight;
+- record new calibration and validation sessions at approximately 7.25, 14.5,
+  22, 25, and 30 ft, with multiple positions and orientations/tilts at every
+  distance;
+- keep calibration and validation session IDs, poses, paths, and recordings
+  completely separate before fitting;
+- submit the unmodified raw calibration and validation recordings first.
+  Before any calibration, evaluation, or claimed result is produced, document
+  and freeze the acquisition protocol, raw-file checksums, session roles, and
+  calibration/validation split;
 - freeze the transform and rerun the same evaluator without validation refit;
 - accept Phase 1 only if every distance independently reaches at least 99%
   within 2 px.
 
+The v1.0.0 CLI remains preserved for the present three bags. A separately
+reviewed, versioned routing adapter may be added only after raw-data sign-off;
+it may not change selection, scoring, thresholds, or the no-refit rule.
+
 Full definitions, parameters, evidence, and commands are in
-`PHASE1_FINAL_CORRECTIONS.md`.
+`PHASE1_FINAL_CORRECTIONS.md`; the field checklist is in
+`PHASE1_PHYSICAL_ACQUISITION_PROTOCOL.md`.

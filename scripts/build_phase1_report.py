@@ -758,9 +758,9 @@ def build_report(report_path: Path, output_path: Path):
     add_callout(
         doc,
         "Final reporting statement",
-        "The validation implementation is complete. The current calibration is not yet accepted "
-        "because only 0.00% of evaluated 14.5 ft returns and 43.18% of evaluated 22.2 ft returns "
-        "have reprojection error at or below 2 pixels, below the required 99% at each distance.",
+        "This legacy report path is superseded by build_phase1_final_report.py. The accepted "
+        "final-run counts are 1,777/1,777 at 7.25 ft, 0/349 at 14.5 ft, and 78/170 at "
+        "22.2 ft within 2 pixels; Phase 1 remains OPEN.",
     )
 
     properties = doc.core_properties

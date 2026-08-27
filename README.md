@@ -10,6 +10,14 @@ Phase 1 is **OPEN** under the project/mentor-defined rule that at every
 required internal distance at least 99% of independently evaluated valid LiDAR
 returns must have Euclidean reprojection error at or below 2 pixels.
 
+Current Phase 1 status: **OPEN — software/documentation complete; new physical
+acquisition and final independent calibration validation pending.**
+
+The accepted software evaluator is frozen as `phase1-evaluator-v1.0.0` at
+commit `50eb04fb8ed732e4dd8cc01092658bdf8fa08295`. Its protected source,
+runtime, raw-input, and evidence hashes are recorded in
+`FROZEN_PHASE1_EVALUATOR.json`.
+
 | Distance | Frames | Points | Mean px | Median px | RMSE px | Std px | Max px | ≤1 px | ≤2 px | ≤3 px | Result |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|:---:|
 | 7.25 ft | 10 | 1,777 | 0.217 | 0.206 | 0.237 | 0.095 | 0.572 | 100.00% | 100.00% | 100.00% | pass |
@@ -19,8 +27,12 @@ returns must have Euclidean reprojection error at or below 2 pixels.
 These are threshold-satisfaction rates, not a percentage calibration-accuracy
 claim. The transform is not refitted after validation to force the target.
 The exact ≤2 px counts are 1,777/1,777, 0/349, and 78/170 respectively;
-therefore the generated 22.2-ft result is 45.8823529%. A separately quoted
-43.18% is not reproducible from the current frozen-run return rows.
+therefore the accepted 22.2-ft result is `78/170 = 45.8823529%`.
+
+The unresolved issue is **systematic reprojection bias whose root cause cannot
+yet be uniquely separated into extrinsic calibration error versus
+point/reference correspondence uncertainty using the current middle/far
+observations.**
 
 ## What the final correction adds
 
@@ -83,6 +95,10 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 .venv/bin/python scripts/phase1_final_experiments.py
 .venv/bin/python scripts/build_phase1_final_report.py
+.venv/bin/python scripts/validate_phase1_capture_submission.py \
+  --check-templates --verify-frozen
+.venv/bin/python scripts/package_frozen_phase1_baseline.py
+.venv/bin/python scripts/package_phase1_acquisition_kit.py
 .venv/bin/python scripts/package_phase1_final.py
 ```
 
@@ -123,9 +139,13 @@ Image evidence:
 Shareable deliverables:
 
 - `deliverables/Phase1_Final_Corrections_Evidence_Report.docx` — formal report
-  with 21 tables and 15 measured-output figures embedded;
+  with required numerical tables and measured-output figures embedded;
 - `deliverables/Phase1_Final_Corrections_Evidence_Package.zip` — report,
   complete derived outputs, documentation, and reproducible code.
+- `deliverables/Phase1_Frozen_Evaluator_Baseline.zip` — hash-verified frozen
+  v1.0.0 evaluator source and accepted numeric evidence;
+- `deliverables/Phase1_Physical_Acquisition_Kit.zip` — frozen physical-capture
+  protocol, pose schedule, blank manifests, and raw-submission validator.
 
 Raw internal bags and the large public archive are not duplicated in the ZIP.
 Their paths and official external source links are in `data_provenance.json`.
@@ -174,13 +194,29 @@ strict Phase 1 decision.
 The supplied bags provide one mostly static session per distance. To close
 Phase 1:
 
-1. rigidly fix the sensor mount and target;
-2. record separate calibration and validation sessions at each distance;
-3. use multiple calibration positions/tilts and distinct held-out poses;
-4. capture a sharp rigid checkerboard approximately 0.60×0.90 m or larger at
-   22–30 ft;
-5. freeze the transform before opening validation bags;
-6. rerun the strict evaluator and pass 99% within 2 px at every distance.
+1. rigidly mount the D455 and Mid-360, add witness marks, and measure/document
+   the three-component physical sensor baseline;
+2. use a measured rigid, flat, matte checkerboard; the far-range planning
+   target is approximately 130 mm squares and a 1.56×2.34 m 12×18 board,
+   subject to a separate 30-ft preflight observability check;
+3. record separate calibration and validation sessions at 7.25, 14.5, 22,
+   25, and 30 ft, with multiple positions and orientations/tilts at every
+   distance;
+4. submit the unmodified raw calibration and validation recordings first.
+   Before any calibration, evaluation, or claimed result is produced,
+   document and freeze the acquisition protocol, raw-file checksums, session
+   roles, and calibration/validation split;
+5. estimate `R,t` only from calibration captures and freeze/hash the transform
+   before releasing validation captures to evaluation;
+6. run the same selection, scoring, and acceptance methodology without
+   validation refit and pass 99% within 2 px independently at every distance.
+
+The frozen v1.0.0 command-line runner is specific to the present three
+same-session bags. After raw-data and split sign-off, a separately reviewed,
+versioned input adapter may be added for the five-distance separate-session
+layout; it must not change the frozen scoring functions or acceptance rule.
+
+The full field protocol is `PHASE1_PHYSICAL_ACQUISITION_PROTOCOL.md`.
 
 Older visualization scripts and `outputs/phase1_validation/` remain for
 historical comparison but are superseded for Phase 1 acceptance by

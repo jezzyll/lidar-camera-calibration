@@ -7,6 +7,13 @@ fails at 14.5 ft and 22.2 ft. The required new controlled static capture and
 larger-board 22–30 ft capture are also open because those raw recordings were
 not supplied. Existing bags are not relabeled as new experiments.
 
+Current Phase 1 status: **OPEN — software/documentation complete; new physical
+acquisition and final independent calibration validation pending.**
+
+The accepted evaluator is frozen as `phase1-evaluator-v1.0.0` at commit
+`50eb04fb8ed732e4dd8cc01092658bdf8fa08295`. Protected source, runtime,
+input, and evidence hashes are recorded in `FROZEN_PHASE1_EVALUATOR.json`.
+
 Acceptance is project/mentor-defined:
 
 > At every required internal distance, at least 99% of independently selected
@@ -91,9 +98,8 @@ returns. They are not described as percentage calibration accuracy.
 
 Exact ≤2 px counts are 1,777/1,777 at 7.25 ft, 0/349 at 14.5 ft, and
 78/170 at 22.2 ft. Therefore the reproducible current 22.2-ft value is
-`78/170 × 100 = 45.8823529%`. A separately quoted 43.18% is not produced by
-the current frozen run and is not substituted for the generated value. The
-status is fail under either value.
+`78/170 × 100 = 45.8823529%`. This evidence-backed numerator and denominator
+are the accepted 22.2-ft result. The status is fail.
 
 All 30 frame rows are in
 `outputs/phase1_final/frame_level_error_metrics.csv` and are embedded in the
@@ -299,8 +305,9 @@ All requested causes were checked:
   at 100.00% within 2 px. One raw near detector result is rejected in full by
   the RGB-only spacing gate because it skipped a physical row. No
   complete 11×17 grid is independently resolved at 14.5 ft or 22.2 ft. The
-  failing-distance root cause therefore remains unresolved between extrinsic
-  error and reference-correspondence uncertainty until the new capture.
+  This is **systematic reprojection bias whose root cause cannot yet be
+  uniquely separated into extrinsic calibration error versus point/reference
+  correspondence uncertainty using the current middle/far observations.**
 
 | Distance | Mean vector `(du,dv)` px | Vector magnitude px | Direction consistency | Dominant image angle |
 |---:|:---:|---:|---:|---:|
@@ -330,12 +337,26 @@ A legitimate new experiment requires:
 6. freeze `R,t` before opening validation bags and run the validator without
    refitting.
 
+Submit the unmodified raw calibration and validation recordings first. Before
+any calibration, evaluation, or claimed result is produced, document and
+freeze the acquisition protocol, raw-file checksums, session roles, and
+calibration/validation split.
+
 ### Larger target at 22–30 ft: open
 
-After the diagnostics above, capture a rigid 0.60×0.90 m checkerboard or larger
-while keeping it fully visible. The print must be sharp/flat with known square
-dimensions. Use it for the approximately 22, 25, and 30 ft observations. The
-same independent acceptance test applies.
+After the diagnostics above, use a rigid, flat, measured target suitable for
+the native RGB resolution. The far-range planning recommendation is 130 mm
+squares on a 1.56×2.34 m 12×18-square board. It predicts approximately 5.50 px
+per square at 30 ft before perspective loss; a disposable 30-ft preflight must
+confirm complete 11×17-grid observability. Use the target at approximately 22,
+25, and 30 ft while keeping it fully visible. The same independent acceptance
+test applies.
+
+The frozen v1.0.0 runner is specific to the existing three same-session bags.
+After raw-data and split sign-off, a separately reviewed, versioned input
+adapter may route the five-distance separate-session data. It must not change
+LiDAR selection, RGB-mask exclusion, scoring, thresholds, aggregation, or the
+no-refit rule.
 
 ## Separate public ACSC result
 
@@ -355,6 +376,10 @@ internal result.
 ```bash
 .venv/bin/python scripts/phase1_final_experiments.py
 .venv/bin/python scripts/build_phase1_final_report.py
+.venv/bin/python scripts/validate_phase1_capture_submission.py \
+  --check-templates --verify-frozen
+.venv/bin/python scripts/package_frozen_phase1_baseline.py
+.venv/bin/python scripts/package_phase1_acquisition_kit.py
 .venv/bin/python scripts/package_phase1_final.py
 ```
 
@@ -377,7 +402,12 @@ Primary outputs:
 - `outputs/phase1_final/qualitative/`;
 - `outputs/phase1_final/public_external/qualitative/`;
 - `outputs/phase1_final/required_new_capture_protocol.md`;
+- `FROZEN_PHASE1_EVALUATOR.json` and `.md`;
+- `PHASE1_PHYSICAL_ACQUISITION_PROTOCOL.md`;
+- `config/phase1_new_capture_protocol.json` and capture manifest templates;
 - `deliverables/Phase1_Final_Corrections_Evidence_Report.docx`;
+- `deliverables/Phase1_Frozen_Evaluator_Baseline.zip`;
+- `deliverables/Phase1_Physical_Acquisition_Kit.zip`;
 - `deliverables/Phase1_Final_Corrections_Evidence_Package.zip`.
 
 The evidence package includes all derived dataset outputs, original RGB copies,

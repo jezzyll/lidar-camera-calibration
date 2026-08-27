@@ -44,6 +44,19 @@ from build_phase1_report import (
 )
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+FREEZE_MANIFEST = REPO_ROOT / "FROZEN_PHASE1_EVALUATOR.json"
+PHASE1_STATUS = (
+    "OPEN — software/documentation complete; new physical acquisition and "
+    "final independent calibration validation pending."
+)
+UNRESOLVED_ISSUE = (
+    "systematic reprojection bias whose root cause cannot yet be uniquely "
+    "separated into extrinsic calibration error versus point/reference "
+    "correspondence uncertainty using the current middle/far observations."
+)
+
+
 def fmt_matrix(matrix, precision=8):
     rows = []
     for row in matrix:
@@ -142,7 +155,7 @@ def add_timestamp_pair_table(doc, distance):
     )
 
 
-def add_title_block(doc, report):
+def add_title_block(doc, report, freeze):
     kicker = doc.add_paragraph()
     kicker.paragraph_format.space_before = Pt(8)
     kicker.paragraph_format.space_after = Pt(4)
@@ -168,7 +181,9 @@ def add_title_block(doc, report):
             ["Internal distances", "7.25 ft, 14.5 ft, and 22.2 ft"],
             ["External dataset", "ACSC real camera-LiDAR checkerboard sample"],
             ["Report date", date.today().strftime("%d %B %Y")],
-            ["Code revision at build", current_commit()],
+            ["Frozen evaluator version", freeze["git_tag"]],
+            ["Frozen evaluator commit", freeze["git_commit"]],
+            ["Report build revision", current_commit()],
             ["Acceptance status", report["status"]["phase1_status"]],
         ],
         [2200, 7160],
@@ -179,18 +194,19 @@ def add_title_block(doc, report):
 
 def build_report(report_path: Path, output_path: Path):
     report = json.loads(report_path.read_text())
+    freeze = json.loads(FREEZE_MANIFEST.read_text())
     output_path.parent.mkdir(parents=True, exist_ok=True)
     doc = Document()
     # Design preset: decision_memo (standard_business_brief alias), with the
     # memo_masthead opening. Navy table headers are one named data-table override.
     configure_styles(doc)
     configure_document(doc)
-    add_title_block(doc, report)
+    add_title_block(doc, report, freeze)
 
     add_callout(
         doc,
         "Decision",
-        "Phase 1 remains OPEN. The strict, disjoint-frame test passes at 7.25 ft "
+        f"Current Phase 1 status: {PHASE1_STATUS} The strict, disjoint-frame test passes at 7.25 ft "
         "but fails at 14.5 ft and 22.2 ft. The requested new controlled capture "
         "and larger 22-30 ft checkerboard capture cannot be claimed because those "
         "raw recordings were not supplied.",
@@ -220,10 +236,8 @@ def build_report(report_path: Path, output_path: Path):
     )
     add_body(
         doc,
-        f"Exact <=2 px numerators/denominators are {count_summary}. The current frozen "
-        "22.2-ft result is therefore 78/170 = 45.8823529%. A separately quoted 43.18% "
-        "cannot be reproduced from this run's evaluated returns and is not substituted for "
-        "the generated value; both values are below the 99% acceptance threshold.",
+        f"Exact <=2 px numerators/denominators are {count_summary}. The accepted frozen "
+        "22.2-ft result is 78/170 = 45.8823529%, which is below the 99% acceptance threshold.",
     )
 
     page_break(doc)
@@ -241,6 +255,8 @@ def build_report(report_path: Path, output_path: Path):
         ["Rotation validation", "Complete", "R^T R, orthogonality error, determinant, and decision"],
         ["Original RGB preserved", "Complete", "No validation resize/warp; masks remain separate"],
         ["Public/internal separation", "Complete", "Independent transforms, splits, outputs, and metrics"],
+        ["Evaluator freeze", "Complete", "v1.0.0 source/runtime/evidence protected by Git identity and SHA-256 manifest"],
+        ["Raw-first submission gate", "Ready", "Protocol, pose schedule, manifest templates, and integrity-only validator packaged"],
         ["New controlled static validation", "Open", "Requires new physical acquisition; not present in supplied bags"],
         ["Larger board at 22-30 ft", "Open", "Requires new physical acquisition after diagnostics"],
         ["Root cause at failing distances", "Open", "Corner grid is not independently observable in current middle/far RGB"],
@@ -566,10 +582,8 @@ def build_report(report_path: Path, output_path: Path):
     add_body(
         doc,
         "At 14.5 ft and 22.2 ft the vector-direction consistency is approximately 0.99, while "
-        "validation plane RMSE remains about 4 mm. This supports a systematic extrinsic/reference "
-        "bias rather than random LiDAR noise. Middle/far boundaries are manual annotations on "
-        "small targets, so improved independent geometry is required before assigning all bias "
-        "to R or t alone.",
+        "validation plane RMSE remains about 4 mm. This supports systematic rather than random "
+        f"error. The unresolved issue is {UNRESOLVED_ISSUE}",
     )
 
     for index, figure in enumerate(report["internal_livox_d455"]["error_vector_figures"], start=1):
@@ -766,6 +780,15 @@ def build_report(report_path: Path, output_path: Path):
     controlled = diagnostics["controlled_static_experiment"]
     larger = diagnostics["larger_far_range_checkerboard"]
     add_callout(doc, "Controlled static experiment", controlled["conclusion"], fill=PALE_RED, color=RED)
+    add_callout(
+        doc,
+        "Raw recordings first",
+        "Submit the unmodified raw calibration and validation recordings first. Before any "
+        "calibration, evaluation, or claimed result is produced, document and freeze the "
+        "acquisition protocol, raw-file checksums, session roles, and calibration/validation split.",
+        fill=PALE_BLUE,
+        color=DARK_BLUE,
+    )
     add_body(
         doc,
         "The existing bags support repeatability/staticity diagnostics, but they were not "
@@ -774,13 +797,26 @@ def build_report(report_path: Path, output_path: Path):
     for step in controlled["required_capture_protocol"]:
         add_number(doc, step)
     add_callout(doc, "Larger far-range board", larger["conclusion"], fill=PALE_RED, color=RED)
-    add_body(doc, f"Recommended target: {larger['recommended_target']}", bold_prefix="Recommended target:")
+    add_body(
+        doc,
+        "Recommended target: approximately 130 mm squares on a rigid 1.56 x 2.34 m "
+        "12 x 18-square board for 22-30 ft, with a disposable 30-ft preflight confirming "
+        "complete native-resolution 11 x 17 grid observability.",
+        bold_prefix="Recommended target:",
+    )
     add_body(doc, f"Required range: {larger['required_range_ft']} ft.", bold_prefix="Required range:")
     add_body(
         doc,
         "When those bags are available, calibration must be performed only on the calibration "
         "session/poses. The frozen transform must then be evaluated on the separate bags without "
         "opening them during fitting.",
+    )
+    add_body(
+        doc,
+        "The frozen v1.0.0 command-line runner is specific to the present three same-session "
+        "bags. After raw-data and split sign-off, a separately reviewed, versioned input adapter "
+        "may route five-distance separate-session inputs, but it must not change point selection, "
+        "mask exclusion, scoring, thresholds, aggregation, or the no-refit rule.",
     )
 
     page_break(doc)
@@ -846,6 +882,10 @@ def build_report(report_path: Path, output_path: Path):
         "error_vectors/ - one representative vector plot per internal distance",
         "qualitative/ and public_external/qualitative/ - original RGB, separate masks, and projections",
         "required_new_capture_protocol.md - exact remaining physical acquisition protocol",
+        "FROZEN_PHASE1_EVALUATOR.json/md - immutable evaluator identity, policies, and SHA-256 evidence",
+        "PHASE1_PHYSICAL_ACQUISITION_PROTOCOL.md - field protocol and raw-first gate",
+        "Phase1_Frozen_Evaluator_Baseline.zip - verified v1.0.0 source and accepted numeric evidence",
+        "Phase1_Physical_Acquisition_Kit.zip - protocol, pose schedule, manifests, and integrity validator",
     ]:
         add_bullet(doc, item)
 
@@ -855,7 +895,8 @@ def build_report(report_path: Path, output_path: Path):
         "The strict reproducible correction/diagnostic work that can be performed on the supplied "
         "real data is complete. The current transform is not accepted because the required "
         "99%-within-2-pixel result is not met at every internal distance. In addition, the new "
-        "controlled static capture and larger 22-30 ft board experiment remain physically open.",
+        "controlled static capture and larger 22-30 ft board experiment remain physically open. "
+        f"The unresolved issue is {UNRESOLVED_ISSUE} Current Phase 1 status: {PHASE1_STATUS}",
     )
     add_callout(
         doc,
