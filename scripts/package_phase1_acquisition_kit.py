@@ -45,7 +45,8 @@ def main():
             "3. Record raw preflight, calibration, and validation bags.\n"
             "4. Fill all manifests and compute SHA-256 checksums.\n"
             "5. Submit raw recordings first. Do not claim a calibration result.\n"
-            "6. Run validate_phase1_capture_submission.py as a metadata/checksum gate only.\n",
+            "6. Run validate_phase1_capture_submission.py as a metadata/checksum gate only.\n"
+            "7. Stop and obtain raw-data/split sign-off before any R/t optimization or scoring.\n",
         )
         for relative in KIT_FILES:
             archive.write(ROOT / relative, relative.as_posix())

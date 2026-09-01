@@ -13,6 +13,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$")
 COPIES = {
+    ROOT / "PHASE1_PHYSICAL_ACQUISITION_PROTOCOL.md": Path("protocol/PHASE1_PHYSICAL_ACQUISITION_PROTOCOL.md"),
+    ROOT / "FROZEN_PHASE1_EVALUATOR.json": Path("protocol/FROZEN_PHASE1_EVALUATOR.json"),
+    ROOT / "FROZEN_PHASE1_EVALUATOR.md": Path("protocol/FROZEN_PHASE1_EVALUATOR.md"),
     ROOT / "config/phase1_new_capture_protocol.json": Path("protocol/phase1_new_capture_protocol.json"),
     ROOT / "config/phase1_pose_schedule.csv": Path("protocol/phase1_pose_schedule.csv"),
     ROOT / "config/phase1_capture_sessions_template.csv": Path("manifests/capture_sessions.csv"),
@@ -56,9 +59,15 @@ def main() -> int:
     for source, relative in COPIES.items():
         shutil.copy2(source, target / relative)
 
-    protocol = target / "protocol/phase1_new_capture_protocol.json"
-    (target / "checksums/PROTOCOL_SHA256.txt").write_text(
-        f"{sha256_file(protocol)}  protocol/phase1_new_capture_protocol.json\n"
+    control_files = sorted((target / "protocol").iterdir())
+    control_hashes = "".join(
+        f"{sha256_file(path)}  {path.relative_to(target).as_posix()}\n"
+        for path in control_files if path.is_file()
+    )
+    (target / "checksums/PROTOCOL_SHA256.txt").write_text(control_hashes)
+    (target / "checksums/SHA256SUMS.txt").write_text(
+        "# Populate with every raw, metadata, measurement, and photograph file "
+        "after acquisition and before submission.\n"
     )
     print(target)
     print("Created blank raw-capture scaffold. Fill and freeze manifests before processing.")

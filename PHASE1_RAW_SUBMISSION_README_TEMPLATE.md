@@ -13,7 +13,7 @@ calculated before this raw submission.
 
 - experiment ID: `<fill>`
 - rig ID: `<fill>`
-- acquisition protocol: `phase1-physical-acquisition/v1.0`
+- acquisition protocol: `phase1-physical-acquisition/v1.1`
 - frozen evaluator: `phase1-evaluator-v1.0.0`
 - calibration session ID(s): `<fill>`
 - validation session ID(s): `<fill>`

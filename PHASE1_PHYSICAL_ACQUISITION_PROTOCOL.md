@@ -2,6 +2,10 @@
 
 ## Status and scope
 
+- protocol version: `phase1-physical-acquisition/v1.1`;
+- protocol revision date: 2 September 2026;
+- frozen evaluator: `phase1-evaluator-v1.0.0`.
+
 Current Phase 1 status: **OPEN — software/documentation complete; new physical
 acquisition and final independent calibration validation pending.**
 
@@ -14,6 +18,90 @@ The unresolved issue is **systematic reprojection bias whose root cause cannot
 yet be uniquely separated into extrinsic calibration error versus
 point/reference correspondence uncertainty using the current middle/far
 observations.**
+
+## Phase 1 completion matrix
+
+| Requirement | Current status | Final target |
+|:---|:---:|:---:|
+| Calibration methodology | ✅ Complete | ✅ Satisfied |
+| Frozen evaluator | ✅ Complete | ✅ Satisfied |
+| Independent LiDAR point selection | ✅ Complete | ✅ Satisfied |
+| RGB masks excluded from LiDAR scoring | ✅ Complete | ✅ Satisfied |
+| Strict calibration/validation split methodology | ✅ Complete | ✅ Satisfied |
+| Calibration objective documented | ✅ Complete | ✅ Satisfied |
+| `K`, `D`, `R`, and `t` documented | ✅ Complete | ✅ Satisfied |
+| Existing-data diagnostics | ✅ Complete | ✅ Satisfied |
+| 7.25-ft existing validation | ✅ Pass | Diagnostic evidence only |
+| 14.5-ft existing validation | ❌ Fail: 0/349 within 2 px | Superseded only by new independent experiment |
+| 22.2-ft existing validation | ❌ Fail: 78/170 within 2 px | Superseded only by new independent experiment |
+| New physical acquisition | 🔴 Pending | Required |
+| Larger rigid checkerboard | 🔴 Pending | Required |
+| 7.25-ft new validation | 🔴 Pending | Required |
+| 14.5-ft new validation | 🔴 Pending | Required |
+| 22-ft new validation | 🔴 Pending | Required |
+| 25-ft new validation | 🔴 Pending | Required |
+| 30-ft new validation | 🔴 Pending | Required |
+| Separate calibration/validation sessions | 🔴 Pending | Required |
+| Final calibration-only frozen `R,t` | 🔴 Pending | Required |
+| Independent validation without refitting | 🔴 Pending | Required |
+| At least 99% within 2 px at every required distance | ❌ Not achieved | Required |
+| Final Phase 1 closure report | 🔴 Pending | Required after independent validation |
+
+The existing evidence report is a methodology/diagnostic report. It is not the
+final Phase 1 closure report.
+
+## Mandatory execution sequence
+
+1. Keep the existing evaluator and evidence frozen.
+2. Rigidly mount the D455 and Mid-360.
+3. Measure and document the physical baseline and sensor orientations.
+4. Install and measure the larger rigid checkerboard.
+5. Run the excluded 30-ft preflight and confirm complete native-resolution
+   11×17 RGB-grid observability.
+6. Record unmodified raw calibration and validation sessions at 7.25, 14.5,
+   22, 25, and 30 ft using multiple positions and orientations.
+7. Perform only the raw-data integrity/checksum audit.
+8. Review and freeze the checksum-anchored calibration/validation split.
+9. After explicit raw-data and split sign-off, estimate `R,t` using calibration
+   recordings only.
+10. Freeze and hash `R,t` before releasing validation recordings.
+11. Run independent validation once without refitting.
+12. Calculate and report the prescribed per-return and aggregate errors.
+13. Close Phase 1 only if every required distance independently satisfies the
+    acceptance criterion. Otherwise diagnose and repeat the physical
+    experiment without changing the threshold after seeing the results.
+
+```mermaid
+flowchart TD
+    A[Existing evaluator complete and frozen] --> B[Physical calibration setup]
+    B --> C[Rigidly mount D455 and Mid-360]
+    C --> D[Measure baseline and orientation]
+    D --> E[Install and measure larger checkerboard]
+    E --> F[Excluded 30-ft preflight]
+    F --> G[Raw acquisition at 7.25, 14.5, 22, 25 and 30 ft]
+    G --> H[Raw-data integrity and checksum audit]
+    H --> I[Review and freeze calibration/validation split]
+    I --> J[Estimate R,t from calibration recordings only]
+    J --> K[Freeze and hash R,t]
+    K --> L[Independent validation without refitting]
+    L --> M[Calculate reprojection errors]
+    M --> N{At least 99% within 2 px at all five distances?}
+    N -->|Yes| O[Close Phase 1]
+    N -->|No| P[Diagnose and repeat physical experiment]
+```
+
+## Mandatory processing hold
+
+Stop after creating and auditing the raw acquisition package. Submit the raw
+bags, photographs, measurements, manifests, and checksums for review first.
+Until raw-data and split sign-off is recorded, do **not**:
+
+- perform calibration or optimize `R,t`;
+- open validation recordings in calibration code;
+- project LiDAR returns for alignment scoring;
+- calculate or report reprojection accuracy;
+- exclude a recording because its eventual reprojection error is high;
+- modify the evaluator, threshold, existing results, `K`, `D`, `R`, or `t`.
 
 ## Non-negotiable raw-first gate
 
@@ -155,16 +243,20 @@ values are planning targets only.
 
 ## 6. Separate sessions and recording order
 
-1. Freeze this protocol and prepare empty manifests.
+1. Freeze this protocol, prepare empty manifests, and preassign every
+   calibration/validation capture role before recording.
 2. Record preflight bags; pass or replace the target/setup.
 3. Record all calibration-session bags and stop the recorder.
 4. Record validation-session bags under different session IDs and raw paths.
-5. Compute checksums and submit all raw data plus manifests.
-6. Audit completeness only; do not calibrate or score yet.
-7. After raw/protocol/split sign-off, estimate `R,t` using calibration bags.
-8. Save and hash the frozen transform and calibration log.
-9. Release validation bags to the frozen evaluator/input adapter.
-10. Evaluate once without refitting and report every required metric.
+5. Compute checksums for the raw data, metadata, measurements, and photographs.
+6. Audit completeness and integrity only; do not calibrate or score yet.
+7. Submit the raw package, review acquisition-only exclusions, and freeze the
+   final checksum-anchored split manifest.
+8. After explicit raw/protocol/split sign-off, estimate `R,t` using calibration
+   bags only.
+9. Save and hash the frozen transform and calibration log.
+10. Release validation bags to the frozen evaluator/input adapter.
+11. Evaluate once without refitting and report every required metric.
 
 ## 7. Required ROS streams and settings
 
@@ -184,8 +276,13 @@ warp, deblur, super-resolve, or regenerate RGB images.
 
 ```text
 data/new_capture/<experiment_id>/
+  RAW_SUBMISSION_README.md
   protocol/
+    PHASE1_PHYSICAL_ACQUISITION_PROTOCOL.md
+    FROZEN_PHASE1_EVALUATOR.json
+    FROZEN_PHASE1_EVALUATOR.md
     phase1_new_capture_protocol.json
+    phase1_pose_schedule.csv
   manifests/
     rig_measurement.csv
     board_inventory.csv
@@ -199,6 +296,7 @@ data/new_capture/<experiment_id>/
     rig/
     boards/
   checksums/
+    PROTOCOL_SHA256.txt
     SHA256SUMS.txt
 ```
 
@@ -249,3 +347,10 @@ criterion at every required distance:
 > reprojection error at or below 2 pixels.
 
 Until that evidence exists, the status remains OPEN.
+
+A result such as 100%, 95%, 97%, 98%, and 96% across the five distances does
+not pass because the criterion applies independently at every distance. Do not
+relax the threshold after observing the results. If a properly controlled
+experiment genuinely cannot attain the project-defined requirement, report
+that result first; only then may the project reconsider whether 99% within
+2 px is appropriate for the sensor geometry and operating range.

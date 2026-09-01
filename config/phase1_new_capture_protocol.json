@@ -1,5 +1,6 @@
 {
-  "schema_version": "phase1-physical-acquisition/v1.0",
+  "schema_version": "phase1-physical-acquisition/v1.1",
+  "protocol_revision_date": "2026-09-02",
   "protocol_status": "FROZEN_BEFORE_CAPTURE",
   "frozen_evaluator": {
     "tag": "phase1-evaluator-v1.0.0",
@@ -34,6 +35,18 @@
     "submit_unmodified_raw_recordings_first": true,
     "freeze_protocol_checksums_roles_and_split_before_processing": true,
     "claimed_result_before_gate_allowed": false
+  },
+  "processing_release_gate": {
+    "raw_package_submitted_before_processing": true,
+    "raw_integrity_audit_pass_required": true,
+    "calibration_validation_split_reviewed_and_frozen": true,
+    "explicit_signoff_required_before_rt_optimization": true
+  },
+  "final_acceptance": {
+    "required_at_each_distance_independently": true,
+    "minimum_percentage_within_threshold": 99.0,
+    "maximum_euclidean_reprojection_error_px": 2.0,
+    "threshold_change_after_observing_results_allowed": false
   },
   "board_planning": {
     "physical_square_columns": 12,
