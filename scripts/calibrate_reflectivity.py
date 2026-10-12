@@ -229,11 +229,86 @@ def save_figures(rgb, uv, intensity, threshold, white_precision, reprojection_rm
     return closeup, full, len(shown_uv)
 
 
+def save_full_white_projection(
+    rgb, camera_grid, uv, intensity, threshold, reprojection_rmse, output_dir
+):
+    """Save a dense, full-board view while keeping black squares unobscured.
+
+    This visualization uses real measured returns at a lower reflectivity
+    threshold than the strict quantitative image.  A camera-white pixel mask is
+    applied only for display, so this output must not be used to calculate the
+    white-square precision metric.
+    """
+    grayscale = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    threshold_keep = intensity >= threshold
+    raw_uv = uv[threshold_keep]
+    raw_intensity = intensity[threshold_keep]
+    raw_pixels = np.rint(raw_uv).astype(int)
+    raw_on_white = grayscale[raw_pixels[:, 1], raw_pixels[:, 0]] > 128
+    raw_white_precision = float(np.mean(raw_on_white))
+    raw_cell_metrics = checker_cell_metrics(rgb, camera_grid, raw_uv)
+
+    white_uv = raw_uv[raw_on_white]
+    white_intensity = raw_intensity[raw_on_white]
+    shown_uv, shown_intensity = unique_bright_points(
+        white_uv, white_intensity, threshold, rgb.shape[1]
+    )
+
+    fig, ax = plt.subplots(figsize=(13, 8), constrained_layout=True)
+    ax.imshow(rgb)
+    scatter = ax.scatter(
+        shown_uv[:, 0], shown_uv[:, 1], c=shown_intensity, s=10,
+        cmap="turbo", vmin=threshold,
+        vmax=max(25, float(shown_intensity.max())), linewidths=0, alpha=0.92,
+    )
+    ax.set_xlim(540, 840)
+    ax.set_ylim(480, 130)
+    ax.set_title(
+        "Full-board LiDAR projection on checkerboard white squares\n"
+        f"measured returns, intensity ≥ {threshold:g}  |  "
+        f"white cells reached {raw_cell_metrics['white_checker_cells_hit']}/"
+        f"{raw_cell_metrics['white_checker_cells_total']}  |  "
+        f"corner RMSE {reprojection_rmse:.3f} px",
+        fontsize=14,
+        fontweight="bold",
+    )
+    ax.text(
+        0.5, -0.025,
+        "Camera-white display mask keeps black squares clear; "
+        "use the intensity≥23 image for unmasked precision evidence.",
+        transform=ax.transAxes, ha="center", va="top", fontsize=9.5,
+        color="#7a1f1f",
+    )
+    ax.axis("off")
+    colorbar = fig.colorbar(scatter, ax=ax, fraction=0.035, pad=0.02)
+    colorbar.set_label("LiDAR reflectivity / intensity")
+    output = output_dir / "reflectivity_white_square_projection_full.png"
+    fig.savefig(output, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+    return output, {
+        "intensity_threshold": float(threshold),
+        "raw_returns_before_white_mask": int(threshold_keep.sum()),
+        "raw_returns_on_camera_white_percent": raw_white_precision * 100.0,
+        "white_checker_cells_reached": raw_cell_metrics["white_checker_cells_hit"],
+        "white_checker_cells_total": raw_cell_metrics["white_checker_cells_total"],
+        "camera_white_masked_returns": int(raw_on_white.sum()),
+        "unique_display_pixels": int(len(shown_uv)),
+        "display_note": (
+            "Measured returns are filtered by camera-white pixels for this presentation image; "
+            "this mask makes the displayed precision 100% by construction."
+        ),
+    }
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--bag", type=Path, default=Path("data/raw_new/new1"))
     parser.add_argument("--output-dir", type=Path, default=Path("outputs"))
     parser.add_argument("--intensity-threshold", type=float, default=23.0)
+    parser.add_argument(
+        "--full-board-threshold", type=float, default=20.0,
+        help="Lower measured-return threshold used only for the white-masked full-board visualization",
+    )
     args = parser.parse_args()
     if not args.bag.exists():
         raise SystemExit(f"Missing extracted new bag: {args.bag}")
@@ -272,6 +347,10 @@ def main():
     closeup, full, displayed = save_figures(
         rgb, uv, points[:, 3], args.intensity_threshold, white_precision, corner_rmse, args.output_dir
     )
+    full_white, full_white_stats = save_full_white_projection(
+        rgb, camera_grid, uv, points[:, 3], args.full_board_threshold,
+        corner_rmse, args.output_dir,
+    )
     T = np.eye(4)
     T[:3, :3], T[:3, 3] = R, t
     report = {
@@ -297,6 +376,7 @@ def main():
             **cell_metrics,
         },
         "orientation_resolution": {"flip_rows": flip_rows, "flip_cols": flip_cols},
+        "full_board_visualization": full_white_stats,
         "metric_note": (
             "White-square percentage is precision/purity after the stated reflectivity threshold; "
             "it is not total calibration accuracy and is measured on the calibration recording."
@@ -307,6 +387,7 @@ def main():
     print(json.dumps(report, indent=2))
     print(f"Saved {closeup}")
     print(f"Saved {full}")
+    print(f"Saved {full_white}")
     print(f"Saved {raster_path}")
     print(f"Saved {result_path}")
 

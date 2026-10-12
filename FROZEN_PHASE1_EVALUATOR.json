@@ -1,0 +1,163 @@
+{
+  "schema_version": "1.0",
+  "frozen_on": "2026-08-28",
+  "status": "FROZEN",
+  "git_tag": "phase1-evaluator-v1.0.0",
+  "git_commit": "50eb04fb8ed732e4dd8cc01092658bdf8fa08295",
+  "tag_object": "1bee30bf426ce54bcd2c88244025d3d9d2cf5bf7",
+  "hash_algorithm": "SHA-256",
+  "protected_source_aggregate_sha256": "b55ee0de6894b98495f5b7d80f552e67616b7c85727e19cfefd99646f64d3eaf",
+  "runtime": {
+    "python": "3.9.6",
+    "numpy": "2.0.2",
+    "opencv_python_headless": "5.0.0.93",
+    "scipy": "1.13.1",
+    "rosbags": "0.9.23",
+    "scikit_learn": "1.6.1",
+    "matplotlib": "3.9.4",
+    "PyYAML": "6.0.3",
+    "Pillow": "11.3.0",
+    "python_docx": "1.2.0"
+  },
+  "policy": {
+    "evaluation_methodology_changes_allowed": false,
+    "calibration_parameter_changes_to_force_acceptance_allowed": false,
+    "validation_refit_allowed": false,
+    "new_raw_capture_processing_allowed_before_protocol_and_split_are_frozen": false,
+    "required_action_for_any_future_method_change": "Create a new version/tag, document the change, and rerun independent validation; never overwrite this baseline."
+  },
+  "accepted_current_results": [
+    {
+      "distance_ft": 7.25,
+      "within_2_px_count": 1777,
+      "evaluated_returns": 1777,
+      "within_2_px_percentage": 100.0,
+      "status": "PASS"
+    },
+    {
+      "distance_ft": 14.5,
+      "within_2_px_count": 0,
+      "evaluated_returns": 349,
+      "within_2_px_percentage": 0.0,
+      "status": "FAIL"
+    },
+    {
+      "distance_ft": 22.2,
+      "within_2_px_count": 78,
+      "evaluated_returns": 170,
+      "within_2_px_percentage": 45.88235294117647,
+      "status": "FAIL"
+    }
+  ],
+  "source_files": [
+    {
+      "path": "scripts/calibrate.py",
+      "sha256": "33a12aad73681d3080332fc2597f53c2477a91b583e9474949654920ebd8014b"
+    },
+    {
+      "path": "scripts/phase1_required_validation.py",
+      "sha256": "698af6130026eab198705fa66d57488bdbd15e4abbd92b6e8cb78142a61bd69e"
+    },
+    {
+      "path": "scripts/phase1_final_experiments.py",
+      "sha256": "40ffd66e7c7a895f00a6da2f1a17520773df2cfac17c6535ab3c7c4e2630cfd0"
+    },
+    {
+      "path": "scripts/checkerboard_mask_evaluation.py",
+      "sha256": "ce0ec8a08d6d7222d283da4ed42203c784ecdfde16ba7ba152639515c489f0f5"
+    },
+    {
+      "path": "scripts/project_lidar_three_distances.py",
+      "sha256": "225dd34a70aff8f6e6edc748ffe152850a79c7cbb9ee6ad097a0510893b339ac"
+    },
+    {
+      "path": "scripts/validate.py",
+      "sha256": "f1be2961e8292d5473d2ed0a34bd29fcc7d33402bd2b8e17d278fcdb82cf9dab"
+    },
+    {
+      "path": "requirements.txt",
+      "sha256": "fa0a9b686b8a19d58058ecaa3eea05ad7269bb71dc7beb64ac52bfca6f43a798"
+    }
+  ],
+  "baseline_raw_files": [
+    {
+      "distance_ft": 7.25,
+      "path": "data/raw/dataset02 7.25feet/dataset02_0.db3",
+      "sha256": "d5686fc54413c3ca84a3b0667a9351fea16b27f3cf06538d7d3095bd0e63e050"
+    },
+    {
+      "distance_ft": 14.5,
+      "path": "data/raw/dataset01 14.5feet/dataset01_0.db3",
+      "sha256": "2f8d1abd0a3d63dd68768da15309941a713039abf98d61f1dbac719722e1fd07"
+    },
+    {
+      "distance_ft": 22.2,
+      "path": "data/raw/dataset03 22.2feet/dataset03_0.db3",
+      "sha256": "7cd4564703ffbc9e14640d9a7a29a9620553b1ad7c051dda8e0b9d455828b777"
+    }
+  ],
+  "evidence_files": [
+    {
+      "path": "outputs/phase1_final/phase1_final_report.json",
+      "sha256": "536e5b1e698cd9414ae9867f8028cad4f8bc717194b3375c607474ecb6274666"
+    },
+    {
+      "path": "outputs/phase1_final/frozen_calibration.json",
+      "sha256": "9355b163303512d9b559d4982ca211b0bdb3b910fa82d53778c8305e9d4d8a03"
+    },
+    {
+      "path": "outputs/phase1_final/frozen_calibration.yaml",
+      "sha256": "7d65cd7b7754e7f93ff72795f0cade2abe3d516a2291592201de15361be82cd2"
+    },
+    {
+      "path": "outputs/phase1_final/calibration_validation_split.json",
+      "sha256": "84842f630f2e08ec951cb7ebd4e06b89843913ac6730d5c616d40fdc3e5947d8"
+    },
+    {
+      "path": "outputs/phase1_final/internal_multiframe_metrics.csv",
+      "sha256": "754225061e54f6415a06759d902a40cc190ed644708a37c5f0695591f99ce4b1"
+    },
+    {
+      "path": "outputs/phase1_final/frame_level_error_metrics.csv",
+      "sha256": "0e8016952f97370f770333b20a6e514c2422a764c299badbe5700a1441423057"
+    },
+    {
+      "path": "outputs/phase1_final/return_individual_errors.csv",
+      "sha256": "7704b87f397cec06f5910f64c8adebc998564f6580f7fb2f3d2a74bf40df32d0"
+    },
+    {
+      "path": "outputs/phase1_final/corner_metrics.csv",
+      "sha256": "b22854c506e37b1f2932c0d8ec088e213b94cca18bc8ca519f7b5d8cee7bcb39"
+    },
+    {
+      "path": "outputs/phase1_final/corner_detection_status.csv",
+      "sha256": "bda5ea72f29d7e601d2050055d44239fe2b779076231cd07598dea95f96aedfd"
+    },
+    {
+      "path": "outputs/phase1_final/corner_individual_errors.csv",
+      "sha256": "5c17cd246798b5372a98df660d6e5f9636e35cb373f9e9550cf2f606f71b8149"
+    },
+    {
+      "path": "outputs/phase1_final/timestamp_pairs.csv",
+      "sha256": "cf40cb5a395c15d5af2346782d2c630975017b31649038f45ae6ce7f65cd11c4"
+    },
+    {
+      "path": "outputs/phase1_final/timestamp_summary.csv",
+      "sha256": "96a9f33447bcdb5a50e30029e8a642792bd990374d7200bae74cb5c540561425"
+    },
+    {
+      "path": "outputs/phase1_final/diagnostic_summary.csv",
+      "sha256": "915076b250d7a23d029cf0eab03ae8b9c217c5f1a4916a80526f2c4377176715"
+    },
+    {
+      "path": "outputs/phase1_final/data_provenance.json",
+      "sha256": "704539dcd7c12d27581ad72cde119096cee6983a5b42bacb7d7cc4d8eeaeab36"
+    },
+    {
+      "path": "outputs/phase1_final/required_new_capture_protocol.md",
+      "sha256": "220c03dda3ddef52c0521d31b7b7de372168c8c13872170388664a3b6c08ca86"
+    }
+  ],
+  "authoritative_parameter_file": "outputs/phase1_final/frozen_calibration.json",
+  "non_authoritative_legacy_warning": "config/calibration.yaml is not read by the strict evaluator and must not be cited as the accepted transform/result."
+}

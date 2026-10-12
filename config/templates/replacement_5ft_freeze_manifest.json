@@ -1,0 +1,14 @@
+{
+  "distance_ft": 5,
+  "preflight_json": "/absolute/path/to/all-pass/preflight.json",
+  "observations_csv": "/absolute/path/to/frozen_18_corner_observations.csv",
+  "rgb_image": "/absolute/path/to/native_640x480_rgb.png",
+  "canonical_lidar_frame": "L10",
+  "frozen_before_projection": true,
+  "physical_identity_frozen": true,
+  "source_hashes": {
+    "preflight_json": "REPLACE_WITH_SHA256",
+    "observations_csv": "REPLACE_WITH_SHA256",
+    "rgb_image": "REPLACE_WITH_SHA256"
+  }
+}

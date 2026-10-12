@@ -1,149 +1,111 @@
-# RealSense D455 ↔ Livox Mid-360 checkerboard calibration
+# RealSense D455–Livox Mid-360 calibration
 
-This repository has a completed **calibration milestone**:
+Tools for checkerboard-based Camera–LiDAR calibration with independent acquisition preflight and strict, fixed-index, entire-pose leave-one-pose-out (LOPO) validation.
 
-1. obtain the RGB camera intrinsic model;
-2. estimate the rigid LiDAR-to-camera extrinsic transform with the checkerboard;
-3. validate it by projecting LiDAR returns onto the checkerboard in RGB frames.
+## Current status
 
-The requested downstream preprocessing flow is now implemented separately in
-`scripts/perception_pipeline.py`; see `PIPELINE_IMPLEMENTATION.md` and the
-concise `MENTOR_HANDOFF.md`. Real
-CenterPoint/BEVFusion execution is deliberately gated on compatible pretrained
-artifacts, CUDA, road-scene data, and 3D labels. The calibration recordings do
-not contain evidence from which vehicle-detection accuracy can be computed.
+**Calibration is not accepted and no deployment transform is released.**
 
-## Recommended mentor-facing result (new high-resolution bag)
+The current mentor-approved scope is:
 
-`new1-002.zip` contains a closer 1280×720 recording. It has a different camera
-intrinsic matrix from the earlier 640×480 bags, so it is processed as a separate
-calibration session by `scripts/calibrate_reflectivity.py`.
+- preserve the frozen 10-ft and 15-ft observations and their hashes;
+- acquire and independently qualify one replacement 5-ft recording;
+- pause 22-ft expansion;
+- run three-pose LOPO only after the replacement observation passes every preflight gate and its physical corner identities are frozen before projection.
 
-The improved pipeline detects the 12×19 grid independently in the RGB image and
-in a metric LiDAR reflectivity raster. It then solves the direct LiDAR-to-camera
-transform from those corner correspondences. Unlike the original dense depth
-overlay, the final figure displays only high-reflectivity returns, leaving the
-absorptive black squares clear.
+Historical pose-specific held-out results from
+`output/background_frame_normalization_delivery/authoritative/results.json` were:
 
-With the documented default intensity threshold of 23:
+| Held-out pose | Result within inclusive 2 px | RMSE |
+|---|---:|---:|
+| 10 ft | 18/18 | 1.1246 px |
+| 15 ft | 18/18 | 1.5004 px |
 
-- checker-corner reprojection RMSE: approximately **0.40 px**;
-- LiDAR reflectivity vs camera brightness correlation: approximately **0.78**;
-- **100.00%** of retained high-reflectivity returns land on camera-white pixels;
-- 2,278 raw high-reflectivity returns support that percentage.
-- retained returns touch **65 of 130 white cells** and **0 black cells**.
+These are historical pose-specific diagnostics from that run. They are not a three-distance acceptance result and do not authorize deployment. The previous 5-ft observation was classified as not calibration grade.
 
-The 100.00% value is specifically **white-square point precision after thresholding**.
-It is not overall calibration accuracy, and it was measured on the calibration
-recording rather than an independent test capture.
+## Geometry and conventions
 
-Run after extracting the ZIP to `data/raw_new/new1/`:
+- physical checkerboard: 7×4 cells;
+- inner-corner topology: 6×3, exactly 18 corners;
+- measured cell pitch: 0.096 m;
+- RGB protocol: native D455 640×480 with matching recorded `CameraInfo`;
+- correspondence: row-major fixed index, `index = row * 6 + column`;
+- transform: `P_C = R_C_L P_L + t_C_L`;
+- validation: positive camera depth and Euclidean pixel error `<= 2.0 px`;
+- acceptance: 18/18 per held-out pose and 54/54 overall.
 
-```bash
-.venv/bin/python scripts/calibrate_reflectivity.py
-```
+LiDAR candidate discovery is radial and rotation invariant. Tilted-board hypotheses are fitted in the estimated board-plane frame with metric windows. Candidate discovery does not establish checker boundaries, origin, polarity, or fixed corner indices; those must be resolved independently from LiDAR-observable physical evidence.
 
-Recommended files to show the mentor:
+## Install
 
-- `outputs/reflectivity_white_square_projection.png` — main close-up;
-- `outputs/reflectivity_full_scene.png` — full-scene proof;
-- `outputs/lidar_reflectivity_checkerboard.png` — what LiDAR alone observes;
-- `outputs/calibration_reflectivity_result.json` — transform and honest metrics.
-
-## What the requested output means
-
-The supplied example image is a calibration validation overlay. For every Livox point
-`p_livox`, the program computes:
-
-```text
-p_camera = R_camera_lidar * p_livox + t_camera_lidar
-[u, v] = project(K, distortion, p_camera)
-```
-
-When calibration is correct, returns from the physical checkerboard land on that same
-checkerboard in the camera image. “Points on black should be clear” means inspecting
-this pixel alignment. A dense colored rectangle by itself is not proof of 99.99% accuracy.
-
-## Dataset audit
-
-The three archives are ROS 2 sqlite bags:
-
-| Recording | Duration | RGB | LiDAR | Board range found in LiDAR |
-|---|---:|---:|---:|---:|
-| dataset02 7.25feet | 99.1 s | 1,486 | 991 | 1.695 m |
-| dataset01 14.5feet | 88.4 s | 1,326 | 884 | 4.285 m |
-| dataset03 22.2feet | 110.8 s | 1,658 | 1,091 | 6.335 m |
-
-Topics used are `/camera/camera/color/image_raw`,
-`/camera/camera/color/camera_info`, and `/livox/lidar`.
-
-Important limitation: the board and sensors do not move within a recording. Repeating
-one pose for many frames does not create the geometrically diverse observations needed
-to re-estimate camera intrinsics. The intrinsic matrix and distortion coefficients in
-this project are therefore extracted from the D455 `CameraInfo` stream (the correct
-device calibration) and validated, rather than falsely reported as a new multi-view
-checkerboard solve.
-
-## Result
-
-The transform direction is:
-
-```text
-p_camera_color_optical = R * p_livox + t
-```
-
-```text
-R = [-0.05337164  -0.99786028   0.03776672]
-    [-0.28107325  -0.02127949  -0.95945037]
-    [ 0.95820107  -0.06182265  -0.27933612]
-
-t = [ 0.15050517, -0.12079831, 0.21021229 ] metres
-```
-
-Measured fit diagnostics:
-
-- checkerboard PnP reprojection RMSE: **0.163 px** on the near calibration image;
-- LiDAR checkerboard plane RMSE: **3.95 mm** after robust fitting;
-- projected-vs-camera board boundary RMSE: approximately **0.66 px** on the near pose;
-- the independent middle and far recordings visually land on their boards.
-
-These are meaningful calibration metrics. Do not claim “99.99% accuracy”; calibration
-quality should be reported in pixels, millimetres, and independent held-out overlays.
-
-The machine-readable result is `outputs/calibration_result.json`; a copy suitable for
-ROS/config use is `config/calibration.yaml`.
-
-## Run from scratch
-
-Extract the three ZIP files into `data/raw/` so the paths are:
-
-```text
-data/raw/dataset01 14.5feet/
-data/raw/dataset02 7.25feet/
-data/raw/dataset03 22.2feet/
-```
-
-Then run:
+Python 3.11 is recommended.
 
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python scripts/calibrate.py
-.venv/bin/python scripts/validate.py
 ```
 
-Outputs:
+The main dependencies are NumPy, SciPy, OpenCV, scikit-learn, Matplotlib, PyYAML and `rosbags`.
 
-- `outputs/calibration_result.json` — intrinsics, distortion, transform, fit quality;
-- `outputs/calibration_validation.png` — the mentor-facing three-distance overlay;
-- `outputs/calibration_closeup_validation.png` — close-up with both board bounds;
-- `outputs/validation_metrics.json` — projected point/depth/bounds summary.
+## Replacement 5-ft preflight
 
-## What is needed for a stronger second capture
+Copy and complete the sanitized templates under `config/templates/`. The board evidence must document the full 7×4 topology, at least three horizontal and three vertical pitch measurements, the 0.672×0.384 m checker extent, and evidence-photo paths. Placeholder or missing evidence never passes.
 
-For a genuine checkerboard-only intrinsic calibration, record at least 15–25 sharp
-camera views with the board filling different parts of the image, including strong tilt
-and distance changes. For stronger extrinsics, record 6–10 simultaneous camera/LiDAR
-board poses (different positions and tilts), keep the sensor rig rigid, measure the exact
-square size, and avoid reflective-floor returns. Do not proceed to models until these
-held-out projection overlays pass.
+```bash
+BAG_5FT="/absolute/path/to/new_replacement_5ft_bag_folder_or_db3"
+OUT="output/replacement_preflight_5ft_$(date +%Y%m%d_%H%M%S)"
+
+test -e "$BAG_5FT" || exit 1
+.venv/bin/python scripts/preflight_replacement_bag.py "$BAG_5FT" \
+  --distance-ft 5 \
+  --measured-pitch-m 0.096 \
+  --board-evidence config/templates/board_evidence.completed.json \
+  --mounting-evidence config/templates/replacement_mounting_evidence.completed.json \
+  --reference-mounting-evidence config/templates/frozen_mounting_reference.completed.json \
+  --block-messages 8 \
+  --output-dir "$OUT"
+```
+
+The command verifies all metadata-referenced DB3 segments and SQLite integrity, hashes the inputs, inspects topics and timing, decodes native images and `CameraInfo`, measures complete-grid detection, evaluates target-masked background drift, enumerates rotation-invariant LiDAR candidates, creates tilted board-plane hypotheses, and validates independent board/mounting evidence. It does not fit an extrinsic or use reprojection error.
+
+Environmental normalization and relative mounting are different claims:
+
+- target-masked LiDAR background registration measures LiDAR-frame/background consistency;
+- it cannot prove that the camera remained fixed relative to the LiDAR;
+- relative-extrinsic compatibility requires matching sensor identities and independent locked-mount/witness evidence tied to the frozen 10/15-ft configuration.
+
+An all-PASS report authorizes a separate review/freeze step. Geometric hypotheses must not be promoted automatically to fixed indices.
+
+## Strict three-pose LOPO
+
+After the accepted replacement observation and its extraction rules have been frozen and hashed:
+
+```bash
+.venv/bin/python scripts/run_replacement_5ft_three_pose_lopo.py \
+  --replacement-freeze-manifest /absolute/path/to/replacement_5ft_freeze_manifest.json \
+  --output-dir "output/replacement_5ft_three_pose_lopo_$(date +%Y%m%d_%H%M%S)"
+```
+
+The runner executes two fresh deterministic runs and these fixed folds:
+
+1. train 10/15 ft, hold out 5 ft;
+2. train 5/15 ft, hold out 10 ft;
+3. train 5/10 ft, hold out 15 ft.
+
+It uses only training poses to estimate each fold transform. There is no nearest-neighbour matching, permutation search, post-projection flip, manual offset, or held-out tuning. Native 640×480 overlays, all 54 correspondence records, per-fold conditioning and aggregate metrics are written to the chosen output directory.
+
+Only if every fold achieves 18/18 and the aggregate is 54/54 with positive depth does the runner fit and release a separate all-data deployment transform. Its in-sample residuals are labeled separately from LOPO validation.
+
+## Tests
+
+```bash
+.venv/bin/pytest -q \
+  tests/test_range_based_lidar_target.py \
+  tests/test_board_plane_lidar_extractor.py \
+  tests/test_preflight_replacement_bag.py \
+  tests/test_replacement_5ft_lopo_gate.py
+```
+
+## Data policy
+
+Raw DB3 bags, archives, virtual environments, credentials, completed private evidence records and generated outputs are intentionally excluded from Git. Commit only reusable code, documentation and sanitized blank templates.
