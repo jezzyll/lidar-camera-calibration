@@ -1,4 +1,10 @@
-# RealSense color intrinsics recorded in all three bags (CameraInfo, 640x480).
+# Historical Phase 1 configuration; retained for reproducibility, not deployment.
+status:
+  calibration_acceptance: NOT_ACCEPTED
+  deployment_transform_released: false
+  current_scope: "preserve frozen 10/15 ft; replacement 5 ft pending; 22 ft paused"
+
+# RealSense color intrinsics recorded in the historical bags (CameraInfo, 640x480).
 camera:
   frame: camera_color_optical_frame
   width: 640
@@ -10,7 +16,8 @@ camera:
     - [0.0, 0.0, 1.0]
   D: [-0.05702033, 0.06783563, -0.00031395, 0.00094203, -0.02286913]
 
-# Checkerboard geometry confirmed from the near recording.
+# Historical 25 mm checkerboard geometry. The current replacement workflow uses
+# a separately evidenced 0.096 m, 7x4-cell / 6x3-inner-corner board.
 checkerboard:
   inner_corners: [11, 17]
   square_size_m: 0.025
@@ -21,6 +28,7 @@ extrinsic:
   parent_frame: camera_color_optical_frame
   child_frame: livox_frame
   method: near_pose_initialization_plus_multi_range_board_boundary_refinement
+  release_status: historical_diagnostic_only_not_for_deployment
   R:
     - [-0.03659380, -0.99855630, 0.03932181]
     - [-0.26905772, -0.02805037, -0.96271549]
@@ -35,8 +43,8 @@ extrinsic:
 quality:
   camera_checkerboard_reprojection_rmse_px: 0.163
   lidar_board_plane_rmse_m: 0.00396
-  joint_board_corner_reprojection_rmse_px: 2.83
-  projected_board_alignment_accuracy_pct_at_22_2_ft: 100.0
+  historical_joint_board_corner_reprojection_rmse_px: 2.83
+  acceptance_note: "visual projection is not independent calibration acceptance"
   alignment_pixel_tolerance: 2.0
   required_accuracy_pct: 99.0
 
@@ -44,4 +52,5 @@ range_requirement:
   required_ft: [22.0, 30.0]
   calibration_dataset: dataset03 22.2feet
   calibration_distance_ft: 22.2
-  pass: true
+  status: paused_not_accepted
+  pass: false
