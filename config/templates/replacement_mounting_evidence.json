@@ -1,0 +1,7 @@
+{
+  "camera_serial": "REPLACE_WITH_RECORDED_D455_SERIAL",
+  "lidar_serial": "REPLACE_WITH_RECORDED_MID360_SERIAL",
+  "rig_locked": false,
+  "witness_marks_unchanged": false,
+  "reference_configuration_id": "REPLACE_WITH_FROZEN_10_15_CONFIGURATION_ID"
+}

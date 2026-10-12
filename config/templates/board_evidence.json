@@ -1,0 +1,10 @@
+{
+  "physical_cells": [7, 4],
+  "inner_corners": [6, 3],
+  "nominal_pitch_m": 0.096,
+  "horizontal_pitch_measurements_m": [],
+  "vertical_pitch_measurements_m": [],
+  "checker_width_m": null,
+  "checker_height_m": null,
+  "photo_paths": []
+}
